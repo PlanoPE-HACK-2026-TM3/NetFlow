@@ -71,7 +71,7 @@ Know your net, Grow your portfolio.
 - Market trend analysis  
 - Property appreciation forecasts  
 - Integration with MLS data sources  
-- Portfolio tracking dashboard  
+- Portfolio tracking dashboard
 
 ## Contributing
 
