@@ -1,0 +1,278 @@
+{
+  "run_at": "2026-04-11T02:10:37.771929+00:00",
+  "base_url": "in-process TestClient",
+  "steps": [
+    {
+      "name": "health",
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 16.07,
+      "response": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "tracing_status",
+      "method": "GET",
+      "path": "/tracing/status",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 6.02,
+      "response": {
+        "langsmith_tracing": false,
+        "langsmith_project": "netflow-mvp",
+        "langsmith_endpoint": "https://api.smith.langchain.com",
+        "langsmith_api_key_set": false,
+        "langsmith_enabled": false,
+        "ollama_base_url": "http://localhost:11434",
+        "ollama_model": "llama3.1:8b",
+        "rentcast_configured": false,
+        "rentcast_base_url": "https://api.rentcast.io/v1"
+      }
+    },
+    {
+      "name": "tracing_verify",
+      "method": "GET",
+      "path": "/tracing/verify",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 2898.83,
+      "response": {
+        "langsmith_enabled": false,
+        "langsmith_api_key_set": false,
+        "langsmith_project": "netflow-mvp",
+        "langsmith_endpoint": "https://api.smith.langchain.com",
+        "langchain_tracing_v2": null,
+        "ollama_reachable": false,
+        "ollama_model_configured": "llama3.1:8b",
+        "ollama_model_seen_in_tags": false,
+        "langchain_invoke_ok": false,
+        "invoke_error": "ollama_tags_error: ConnectError: All connection attempts failed"
+      }
+    },
+    {
+      "name": "search_75080",
+      "method": "POST",
+      "path": "/properties/search",
+      "status": 503,
+      "ok": true,
+      "latency_ms": 3413.86,
+      "response": {
+        "detail": "Real property provider failed for 'Richardson, TX 75080': HomeHarvest: JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+      }
+    },
+    {
+      "name": "analysis_property",
+      "method": "POST",
+      "path": "/analysis/property",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 3543.44,
+      "response": {
+        "property_id": "manual-75080",
+        "investment_score": 30,
+        "risk_score": 76,
+        "confidence": 0.62,
+        "projected_12m_change_percent": -2.01,
+        "recommendation": "avoid",
+        "rationale": "Fallback heuristic analysis combining mortgage pressure, property pricing, and current housing news volume. Calibrated by +3.51% from historical feedback."
+      }
+    },
+    {
+      "name": "portfolio_add",
+      "method": "POST",
+      "path": "/portfolio",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 16.84,
+      "response": {
+        "property_id": "manual-75080",
+        "address": "900 E Collins Blvd",
+        "city": "Richardson",
+        "state": "TX",
+        "price": 525000.0,
+        "notes": "automated user test",
+        "id": 1,
+        "created_at": "2026-04-11T02:10:47.657508"
+      }
+    },
+    {
+      "name": "portfolio_list",
+      "method": "GET",
+      "path": "/portfolio",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 8.6,
+      "response": [
+        {
+          "property_id": "manual-75080",
+          "address": "900 E Collins Blvd",
+          "city": "Richardson",
+          "state": "TX",
+          "price": 525000.0,
+          "notes": "automated user test",
+          "id": 1,
+          "created_at": "2026-04-11T02:10:47.657508"
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "method": "POST",
+      "path": "/chat",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 7089.61,
+      "response": {
+        "answer": "You asked: 'Give me a concise outlook for my portfolio.'. Current 30Y mortgage rate is 6.75%. Your tracked properties: 1. Recent average risk score: 75.0. Fallback assistant was used because local LLM output was unavailable."
+      }
+    },
+    {
+      "name": "model_performance",
+      "method": "GET",
+      "path": "/model/performance",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 19.31,
+      "response": {
+        "feedback_count": 2,
+        "mae": 3.51,
+        "rmse": 4.9639,
+        "directional_accuracy": 0.5,
+        "avg_error": 3.51,
+        "calibration_shift": 3.51
+      }
+    },
+    {
+      "name": "observability_events",
+      "method": "GET",
+      "path": "/observability/events?limit=20",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 11.38,
+      "response": [
+        {
+          "id": 6,
+          "operation": "chat.forecast",
+          "success": true,
+          "latency_ms": 7062.63,
+          "fallback_used": true,
+          "provider": "rule_based",
+          "input_summary": "message_len=43; portfolio_count=1",
+          "output_summary": "You asked: 'Give me a concise outlook for my portfolio.'. Current 30Y mortgage rate is 6.75%. Your tracked properties: 1. Recent average risk score: 75.0. Fallback assistant was used because local LLM output was unavailable.",
+          "created_at": "2026-04-11T02:10:54.743708"
+        },
+        {
+          "id": 5,
+          "operation": "analysis.property",
+          "success": true,
+          "latency_ms": 3510.14,
+          "fallback_used": true,
+          "provider": "heuristic",
+          "input_summary": "property_id=manual-75080; location=Richardson,TX",
+          "output_summary": "rec=avoid; invest=30; risk=76",
+          "created_at": "2026-04-11T02:10:47.630384"
+        },
+        {
+          "id": 4,
+          "operation": "chat.forecast",
+          "success": true,
+          "latency_ms": 9800.97,
+          "fallback_used": true,
+          "provider": "rule_based",
+          "input_summary": "message_len=43; portfolio_count=1",
+          "output_summary": "You asked: 'Give me a concise outlook for my portfolio.'. Current 30Y mortgage rate is 6.75%. Your tracked properties: 1. Recent average risk score: 75.0. Fallback assistant was used because local LLM output was unavailable.",
+          "created_at": "2026-04-11T02:04:11.393540"
+        },
+        {
+          "id": 3,
+          "operation": "analysis.property",
+          "success": true,
+          "latency_ms": 4623.34,
+          "fallback_used": true,
+          "provider": "heuristic",
+          "input_summary": "property_id=manual-75080; location=Richardson,TX",
+          "output_summary": "rec=avoid; invest=30; risk=76",
+          "created_at": "2026-04-11T02:04:01.497287"
+        },
+        {
+          "id": 2,
+          "operation": "chat.forecast",
+          "success": true,
+          "latency_ms": 6972.61,
+          "fallback_used": true,
+          "provider": "rule_based",
+          "input_summary": "message_len=43; portfolio_count=1",
+          "output_summary": "You asked: 'Give me a concise outlook for my portfolio.'. Current 30Y mortgage rate is 6.75%. Your tracked properties: 1. Recent average risk score: 75.0. Fallback assistant was used because local LLM output was unavailable.",
+          "created_at": "2026-04-11T01:58:55.246776"
+        },
+        {
+          "id": 1,
+          "operation": "analysis.property",
+          "success": true,
+          "latency_ms": 3490.11,
+          "fallback_used": true,
+          "provider": "heuristic",
+          "input_summary": "property_id=manual-75080; location=Richardson,TX",
+          "output_summary": "rec=avoid; invest=30; risk=76",
+          "created_at": "2026-04-11T01:58:48.221042"
+        }
+      ]
+    },
+    {
+      "name": "model_feedback",
+      "method": "POST",
+      "path": "/model/feedback",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 15.53,
+      "response": {
+        "property_id": "manual-75080",
+        "predicted_12m_change_percent": -2.01,
+        "actual_12m_change_percent": 1.5,
+        "confidence": 0.62,
+        "recommendation": "avoid",
+        "id": 3,
+        "model_name": "llama3.1:8b",
+        "created_at": "2026-04-11T02:10:54.803390"
+      }
+    },
+    {
+      "name": "portfolio_delete",
+      "method": "DELETE",
+      "path": "/portfolio/1",
+      "status": 200,
+      "ok": true,
+      "latency_ms": 16.73,
+      "response": {
+        "deleted": 1
+      }
+    }
+  ],
+  "summary": {
+    "total_steps": 12,
+    "passed_steps": 12,
+    "failed_steps": 0,
+    "avg_latency_ms": 1421.35,
+    "max_latency_ms": 7089.61,
+    "health_ok": true,
+    "langsmith_enabled": false,
+    "langchain_invoke_ok": false,
+    "ollama_reachable": false,
+    "real_listing_count": 0,
+    "search_provider_error": "Real property provider failed for 'Richardson, TX 75080': HomeHarvest: JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+    "analysis_has_scores": true,
+    "chat_has_answer": true,
+    "events_count": 6,
+    "performance_snapshot": {
+      "feedback_count": 2,
+      "mae": 3.51,
+      "rmse": 4.9639,
+      "directional_accuracy": 0.5,
+      "avg_error": 3.51,
+      "calibration_shift": 3.51
+    }
+  }
+}
