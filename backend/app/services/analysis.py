@@ -4,7 +4,7 @@ from app.schemas import AnalysisOut, PropertyOut
 from app.services.llm import LLMTrace, generate_json
 
 
-def _heuristic_analysis(property_item: PropertyOut, mortgage_rate: float, news_count: int) -> AnalysisOut:
+def heuristic_property_analysis(property_item: PropertyOut, mortgage_rate: float, news_count: int) -> AnalysisOut:
     price_anchor = max(min(property_item.price / 1000000, 1.5), 0.2)
     risk = int(min(95, max(10, (mortgage_rate * 10) + (price_anchor * 20) - news_count)))
     invest = int(min(95, max(5, 100 - risk + (property_item.beds or 0) * 2)))
@@ -19,7 +19,7 @@ def _heuristic_analysis(property_item: PropertyOut, mortgage_rate: float, news_c
         projected_12m_change_percent=projected,
         recommendation=recommendation,
         rationale=(
-            "Fallback heuristic analysis combining mortgage pressure, property pricing, and current housing news volume."
+            "Heuristic portfolio summary using mortgage pressure, pricing, and news volume."
         ),
     )
 
@@ -52,4 +52,4 @@ async def analyze_property(property_item: PropertyOut, mortgage_rate: float, new
         )
     except Exception as exc:
         trace.complete("fallback", {"provider": "heuristic", "error": str(exc)})
-        return _heuristic_analysis(property_item, mortgage_rate, news_count)
+        return heuristic_property_analysis(property_item, mortgage_rate, news_count)

@@ -24,7 +24,7 @@ from app.schemas import (
     PropertySearchRequest,
     TracingVerifyOut,
 )
-from app.services.analysis import analyze_property
+from app.services.analysis import analyze_property, heuristic_property_analysis
 from app.services.chat import build_chat_response
 from app.services.fred import get_mortgage_rate
 from app.services.news import get_housing_news
@@ -175,8 +175,8 @@ async def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRespo
     portfolio_items = db.query(PortfolioItem).all()
     portfolio = [PortfolioItemOut.model_validate(p) for p in portfolio_items]
 
-    analyses = []
     rate_data = await get_mortgage_rate()
+    analyses = []
     for item in portfolio[:5]:
         prop = PropertyOut(
             property_id=item.property_id,
@@ -192,7 +192,8 @@ async def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRespo
             description=item.notes,
             source="portfolio",
         )
-        analyses.append(await analyze_property(prop, mortgage_rate=rate_data["value"], news_count=3))
+        # Use a fast heuristic summary for chat context instead of running multiple LLM analyses.
+        analyses.append(heuristic_property_analysis(prop, mortgage_rate=rate_data["value"], news_count=3))
 
     answer = await build_chat_response(payload.message, portfolio, rate_data["value"], analyses)
     latency_ms = round((time.perf_counter() - started) * 1000, 2)

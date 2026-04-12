@@ -1,6 +1,8 @@
 import re
+from typing import Any
 
 import httpx
+import pandas as pd
 
 from app.schemas import PropertyOut
 from app.services.local_listings import search_local_listings
@@ -33,6 +35,47 @@ def _demo_properties(location: str, limit: int) -> list[PropertyOut]:
         )
         for i in range(limit)
     ]
+
+
+def _safe_value(value: Any, default: Any = None) -> Any:
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except Exception:
+        pass
+    return value
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    value = _safe_value(value)
+    if value == "":
+        return default
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    value = _safe_value(value)
+    if value == "":
+        return default
+    try:
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _safe_str(value: Any, default: str = "") -> str:
+    value = _safe_value(value)
+    if value == "":
+        return default
+    try:
+        return str(value)
+    except Exception:
+        return default
 
 
 def _normalize_location(location: str) -> str:
@@ -69,22 +112,22 @@ def search_properties(location: str, limit: int = 10, allow_demo: bool = False) 
         raw = scrape_property(location=normalized_location, listing_type="for_sale", past_days=30)
         items = []
         for idx, row in raw.head(limit).iterrows():
-            price = float(row.get("list_price") or 0)
+            price = _safe_float(row.get("list_price"))
             if price <= 0:
                 continue
             items.append(
                 PropertyOut(
-                    property_id=str(row.get("property_url") or f"hh-{idx}"),
-                    address=str(row.get("street") or "Unknown address"),
-                    city=str(row.get("city") or "Unknown"),
-                    state=str(row.get("state") or ""),
-                    zip=str(row.get("zip_code") or ""),
+                    property_id=_safe_str(row.get("property_url"), f"hh-{idx}"),
+                    address=_safe_str(row.get("street"), "Unknown address"),
+                    city=_safe_str(row.get("city"), "Unknown"),
+                    state=_safe_str(row.get("state"), ""),
+                    zip=_safe_str(row.get("zip_code"), ""),
                     price=price,
-                    beds=float(row.get("beds") or 0),
-                    baths=float(row.get("full_baths") or 0),
-                    sqft=int(row.get("sqft") or 0),
-                    listing_url=str(row.get("property_url") or ""),
-                    description=str(row.get("description") or ""),
+                    beds=_safe_float(row.get("beds")),
+                    baths=_safe_float(row.get("full_baths")),
+                    sqft=_safe_int(row.get("sqft")),
+                    listing_url=_safe_str(row.get("property_url"), ""),
+                    description=_safe_str(row.get("description"), ""),
                 )
             )
         if items:

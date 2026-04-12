@@ -1,6 +1,7 @@
 # NETFLOW MVP
 
 NETFLOW is a full-stack real-estate intelligence app with:
+
 - property search
 - AI investment/risk scoring
 - portfolio tracking
@@ -22,11 +23,11 @@ NETFLOW is a full-stack real-estate intelligence app with:
 
 - Search properties by city/state or ZIP
 - Analyze a property with:
-	- `investment_score` (0-100)
-	- `risk_score` (0-100)
-	- `projected_12m_change_percent`
-	- `recommendation` (`buy | hold | avoid`)
-	- `confidence`
+  - `investment_score` (0-100)
+  - `risk_score` (0-100)
+  - `projected_12m_change_percent`
+  - `recommendation` (`buy | hold | avoid`)
+  - `confidence`
 - Add/remove/list portfolio items
 - Ask chat questions with portfolio context
 
@@ -35,6 +36,7 @@ NETFLOW is a full-stack real-estate intelligence app with:
 - Primary path: Ollama model returns JSON analysis
 - Fallback path: deterministic heuristic analysis if Ollama is unavailable
 - Analysis is always returned (either model or fallback)
+- Chat responses use heuristic portfolio summaries for speed (single LLM call per chat)
 
 ### Observability and model quality
 
@@ -42,11 +44,11 @@ NETFLOW is a full-stack real-estate intelligence app with:
 - `GET /observability/events` returns persisted inference logs (latency, provider, fallback usage)
 - `POST /model/feedback` stores predicted vs actual outcomes
 - `GET /model/performance` returns quality metrics:
-	- MAE
-	- RMSE
-	- directional accuracy
-	- average error
-	- calibration shift
+  - MAE
+  - RMSE
+  - directional accuracy
+  - average error
+  - calibration shift
 
 ### Lightweight training/calibration
 
@@ -61,6 +63,7 @@ NETFLOW is a full-stack real-estate intelligence app with:
 - Demo listings are opt-in only by sending `allow_demo=true`
 
 Important:
+
 - In this environment, HomeHarvest's upstream provider may be blocked intermittently (anti-bot behavior), so you can get a truthful provider error instead of fake inventory.
 
 ## Project Structure
@@ -75,17 +78,23 @@ Important:
 
 ## Setup
 
+### Prerequisites
+
+- Python 3.9+
+- Node.js 18+
+- Ollama installed and running (see Local LLM Setup below)
+
 ### Backend dependencies
 
 ```powershell
-Set-Location "c:\HOME\CODING\New folder\NETFLOWMVP\backend"
-& "c:/HOME/CODING/New folder/NETFLOWMVP/.venv/Scripts/pip.exe" install -r requirements.txt
+Set-Location "backend"
+& ".\.venv\Scripts\pip.exe" install -r requirements.txt
 ```
 
 ### Frontend dependencies
 
 ```powershell
-Set-Location "c:\HOME\CODING\New folder\NETFLOWMVP\frontend"
+Set-Location "frontend"
 npm install
 ```
 
@@ -94,11 +103,12 @@ npm install
 Create `backend/.env` from `backend/.env.example`.
 
 Recommended variables:
+
 - `FRED_API_KEY=`
 - `NEWS_API_KEY=`
 - `LOCAL_LISTINGS_PATH=data/listings.csv`
 - `OLLAMA_BASE_URL=http://localhost:11434`
-- `OLLAMA_MODEL=llama3.1:8b`
+- `OLLAMA_MODEL=mistral:latest`
 - `LANGSMITH_API_KEY=`
 - `LANGSMITH_TRACING=false`
 - `LANGSMITH_PROJECT=netflow-mvp`
@@ -106,22 +116,59 @@ Recommended variables:
 - `DATABASE_URL=sqlite:///./netflow.db`
 
 To enable LangSmith traces, set both:
+
 - `LANGSMITH_API_KEY` (non-empty)
 - `LANGSMITH_TRACING=true`
+
+## Local LLM Setup
+
+NETFLOW uses Ollama for local AI inference. Follow these steps to set it up:
+
+1. **Install Ollama**:
+   - Download and install Ollama from [ollama.ai](https://ollama.ai).
+   - Ensure Ollama is running (it starts automatically after installation).
+
+2. **Pull the required model**:
+
+   ```powershell
+   ollama pull mistral:latest
+   ```
+
+   - This downloads the `mistral:latest` model (~4.1 GB).
+   - Alternative: `ollama pull llama3.1:8b` (~4.9 GB, slower but potentially more accurate).
+
+3. **Verify setup**:
+
+   ```powershell
+   ollama list
+   ```
+
+   - Should show the pulled model(s).
+
+   ```powershell
+   ollama run mistral:latest
+   ```
+
+   - Test interactive mode (type `/bye` to exit).
+
+4. **Update `.env`**:
+   - Set `OLLAMA_MODEL=mistral:latest` (or your preferred model).
+   - Ensure `OLLAMA_BASE_URL=http://localhost:11434`.
 
 ## Run
 
 ### Start backend
 
 ```powershell
-Set-Location "c:\HOME\CODING\New folder\NETFLOWMVP\backend"
-& "c:/HOME/CODING/New folder/NETFLOWMVP/.venv/Scripts/python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+Set-Location "backend"
+$env:PYTHONPATH = "."
+& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### Start frontend
 
 ```powershell
-Set-Location "c:\HOME\CODING\New folder\NETFLOWMVP\frontend"
+Set-Location "frontend"
 npm run dev
 ```
 
@@ -146,6 +193,7 @@ POST /properties/search
 ```
 
 Expected behavior:
+
 - returns local dataset listings first (free/offline path)
 - then tries HomeHarvest as secondary source
 - returns `503` with a clear provider message when blocked
@@ -175,6 +223,7 @@ POST /analysis/property
 ```
 
 Response includes:
+
 - `investment_score`
 - `risk_score`
 - `projected_12m_change_percent`
@@ -188,6 +237,37 @@ Response includes:
 - `GET /model/performance`
 - `GET /observability/events`
 
+## Troubleshooting
+
+### Common Issues and Solutions
+
+1. **"Fallback assistant was used because local LLM output was unavailable"**
+   - **Cause**: Ollama not running, model not downloaded, or compatibility issues.
+   - **Solution**:
+     - Ensure Ollama is installed and running: `Get-Process -Name ollama`.
+     - Pull the model: `ollama pull mistral:latest`.
+     - Upgrade LangChain packages if needed: `pip install --upgrade langchain-ollama`.
+     - Check `.env` for correct `OLLAMA_MODEL` and `OLLAMA_BASE_URL`.
+
+2. **Chat responses are slow**
+   - **Cause**: Multiple LLM calls per request (fixed in recent updates).
+   - **Solution**: The `/chat` endpoint now uses fast heuristic summaries. If still slow, switch to a smaller model like `mistral:latest` or use a hosted LLM.
+
+3. **Pydantic/Model Rebuild Errors**
+   - **Cause**: Incompatibility between LangChain and Pydantic versions.
+   - **Solution**: Upgrade `langchain-ollama` to version 1.1.0+: `pip install --upgrade langchain-ollama langchain-core`.
+
+4. **Backend fails to start**
+   - **Cause**: Virtual environment not activated or missing dependencies.
+   - **Solution**:
+     - Activate venv: `.\.venv\Scripts\Activate.ps1`.
+     - Install deps: `pip install -r requirements.txt`.
+     - Ensure Python path is set correctly.
+
+5. **Property search returns 503 errors**
+   - **Cause**: Upstream provider (HomeHarvest) blocking requests.
+   - **Solution**: Use `allow_demo=true` for demo data, or populate `data/listings.csv` with local data.
+
 ## Current Known Limitation
 
 - Real listing retrieval depends on third-party anti-bot controls. This app now reports that state explicitly and does not silently replace real data with fake data unless you explicitly request demo mode.
@@ -197,22 +277,24 @@ Response includes:
 Run the end-to-end user journey test runner:
 
 ```powershell
-Set-Location "c:\HOME\CODING\New folder\NETFLOWMVP\backend"
-& "c:/HOME/CODING/New folder/NETFLOWMVP/.venv/Scripts/python.exe" scripts/run_user_tests.py
+Set-Location "backend"
+& ".\.venv\Scripts\python.exe" scripts/run_user_tests.py
 ```
 
 Optional against a running backend server:
 
 ```powershell
-Set-Location "c:\HOME\CODING\New folder\NETFLOWMVP\backend"
-& "c:/HOME/CODING/New folder/NETFLOWMVP/.venv/Scripts/python.exe" scripts/run_user_tests.py --base-url http://127.0.0.1:8000
+Set-Location "backend"
+& ".\.venv\Scripts\python.exe" scripts/run_user_tests.py --base-url http://127.0.0.1:8000
 ```
 
 Output:
+
 - JSON report file at `backend/analytics/latest_user_test_report.json`
 - Timestamped report at `backend/analytics/user_test_report-YYYYMMDD-HHMMSS.json`
 
 The report includes:
+
 - endpoint pass/fail and latency
 - LangSmith enabled status
 - LangChain invoke health
