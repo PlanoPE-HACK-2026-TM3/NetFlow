@@ -345,7 +345,7 @@ async def health():
     import urllib.request
     ollama_ok = False
     try:
-        from backend.config import OLLAMA_BASE_URL
+        from backend.config import OLLAMA_BASE_URL, OLLAMA_MODEL
         urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
         ollama_ok = True
     except Exception:
