@@ -11,7 +11,7 @@
  */
 
 const DB_NAME    = "netflow_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // ── Simple SHA-256 hash using Web Crypto ─────────────────────
 export async function hashPassword(plain: string): Promise<string> {
@@ -42,6 +42,15 @@ function openDB(): Promise<IDBDatabase> {
         const sh = db.createObjectStore("searchHistory", { keyPath: "id", autoIncrement: true });
         sh.createIndex("username", "username", { unique: false });
         sh.createIndex("ts",       "ts",       { unique: false });
+      }
+
+      // appLogs store used by src/lib/logger.ts. Must be created here so the
+      // two open()s against netflow_db don't race into a version-1 DB that's
+      // missing whichever file opened second.
+      if (!db.objectStoreNames.contains("appLogs")) {
+        const al = db.createObjectStore("appLogs", { keyPath: "id", autoIncrement: true });
+        al.createIndex("ts",    "ts",    { unique: false });
+        al.createIndex("level", "level", { unique: false });
       }
     };
 

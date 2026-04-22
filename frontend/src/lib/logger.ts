@@ -53,7 +53,33 @@ function write(level: LogLevel, category: string, message: string, meta?: Record
 async function persistLog(entry: LogEntry) {
   if (typeof indexedDB === "undefined") return;
   return new Promise<void>((res) => {
-    const req = indexedDB.open("netflow_db", 1);
+    // Must open at the same version as src/lib/db.ts (currently 2). If this
+    // file opens the DB first, we also have to create every store that db.ts
+    // expects — otherwise db.ts will open a pre-existing v2 DB, skip its
+    // onupgradeneeded, and then throw NotFoundError on its first transaction.
+    const req = indexedDB.open("netflow_db", 2);
+    req.onupgradeneeded = (e) => {
+      const db = (e.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains("appLogs")) {
+        const al = db.createObjectStore("appLogs", { keyPath: "id", autoIncrement: true });
+        al.createIndex("ts",    "ts",    { unique: false });
+        al.createIndex("level", "level", { unique: false });
+      }
+      if (!db.objectStoreNames.contains("users")) {
+        const us = db.createObjectStore("users", { keyPath: "username" });
+        us.createIndex("role", "role", { unique: false });
+      }
+      if (!db.objectStoreNames.contains("loginHistory")) {
+        const lh = db.createObjectStore("loginHistory", { keyPath: "id", autoIncrement: true });
+        lh.createIndex("username", "username", { unique: false });
+        lh.createIndex("ts",       "ts",       { unique: false });
+      }
+      if (!db.objectStoreNames.contains("searchHistory")) {
+        const sh = db.createObjectStore("searchHistory", { keyPath: "id", autoIncrement: true });
+        sh.createIndex("username", "username", { unique: false });
+        sh.createIndex("ts",       "ts",       { unique: false });
+      }
+    };
     req.onsuccess = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains("appLogs")) { db.close(); res(); return; }

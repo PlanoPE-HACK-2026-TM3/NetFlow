@@ -9,6 +9,11 @@ interface Props    { property:Property; mortgageRate:number; onClose:()=>void; }
 const API_BASE = typeof process!=="undefined"&&process.env.NEXT_PUBLIC_API_URL
   ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:8000";
 
+// Color helper for cash-flow values: green when positive, red otherwise.
+// Added here because the original repo referenced cfColor() without defining it,
+// breaking `next build` under strict type-check.
+const cfColor = (v: number): string => (v > 0 ? "#10b981" : "#ef4444");
+
 function buildSystemPrompt(p:Property, rate:number):string {
   const down=p.price*.2, loan=p.price-down, r=rate/100/12, n=360;
   const pi=r>0?loan*(r*(1+r)**n)/((1+r)**n-1):loan/n;
