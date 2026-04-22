@@ -358,7 +358,6 @@ async def health():
         "live_data":    bool(RENTCAST_API_KEY and FRED_API_KEY),
         "agent_stages": ["financial_enrichment","llm_scoring","strategy_rerank","risk_screen","narrative"],
         "langsmith":    bool(LANGCHAIN_API_KEY),
-        "model":        OLLAMA_MODEL if ollama_ok else "",
     }
 
 

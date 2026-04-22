@@ -267,7 +267,9 @@ export default function Home() {
   const [tab,         setTab]         = useState<"list"|"charts">("list");
   const [loginHist,   setLoginHist]   = useState<LoginRecord[]>([]);
   const [searchHist,  setSearchHist]  = useState<SearchRecord[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
+  const [clarifyMsg,     setClarifyMsg]     = useState("");
+  const [suggestedPrompt,setSuggestedPrompt]= useState("");
   const [showLog,     setShowLog]     = useState(false);
   const [showAgent,   setShowAgent]   = useState(false);
   const aiRef = useRef("");
@@ -326,7 +328,13 @@ export default function Home() {
         for(const line of lines){
           try{
             const ev=JSON.parse(line.slice(6));
-            if(ev.type==="status")        { setStatusMsg(ev.msg); log.api("SSE status",{msg:ev.msg}); }
+            if(ev.type==="clarify")       {
+              setStatusMsg(""); setLoading(false);
+              setClarifyMsg(ev.msg||"");
+              setSuggestedPrompt(ev.suggested_prompt||"");
+              log.warn("search","Clarification needed",{msg:ev.msg});
+            }
+            else if(ev.type==="status")   { setStatusMsg(ev.msg); log.api("SSE status",{msg:ev.msg}); }
             else if(ev.type==="properties"){
               partial={...partial,properties:ev.data,mortgage_rate:ev.mortgage_rate,zip_code:ev.zip_code,location_display:ev.location_display};
               setResult(partial as SearchResult); setLoading(false); setStreaming(true); setTab("list");
@@ -408,8 +416,42 @@ export default function Home() {
         {/* ── MAIN CONTENT ───────────────────────────────────── */}
         <main className="main-content">
 
+          {/* Clarification banner */}
+          {clarifyMsg&&!loading&&!result&&(
+            <div style={{padding:"18px 20px",borderRadius:"14px",background:"rgba(245,158,11,.08)",
+              border:"1px solid rgba(245,158,11,.35)",display:"flex",flexDirection:"column",gap:"12px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                <span style={{fontSize:"22px",flexShrink:0}}>💬</span>
+                <div>
+                  <div style={{fontSize:"14px",fontWeight:700,color:"var(--amb)",marginBottom:"5px"}}>
+                    Need a bit more detail
+                  </div>
+                  <div style={{fontSize:"13px",color:"var(--t2)",lineHeight:1.7}}>{clarifyMsg}</div>
+                </div>
+              </div>
+              {suggestedPrompt&&(
+                <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                  <span style={{fontSize:"12px",color:"var(--t3)"}}>Try:</span>
+                  <button
+                    onClick={()=>handleSearch({zip_code:"",budget:450000,property_type:"SFH",min_beds:3,strategy:"LTR",prompt_text:suggestedPrompt})}
+                    style={{padding:"6px 14px",borderRadius:"8px",fontSize:"12px",fontWeight:600,
+                      background:"rgba(245,158,11,.12)",border:"1px solid rgba(245,158,11,.35)",
+                      color:"var(--amb)",cursor:"pointer",fontFamily:"inherit"}}>
+                    ✨ {suggestedPrompt}
+                  </button>
+                  <button onClick={()=>{setClarifyMsg("");setSuggestedPrompt("");}}
+                    style={{padding:"6px 10px",borderRadius:"8px",fontSize:"11px",
+                      background:"none",border:"1px solid var(--bd)",color:"var(--t3)",
+                      cursor:"pointer",fontFamily:"inherit"}}>
+                    ✕ Dismiss
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Empty state */}
-          {!result&&!loading&&(
+          {!result&&!loading&&!clarifyMsg&&(
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"14px",padding:"60px 24px",textAlign:"center",border:"1px dashed var(--bd)",borderRadius:"16px",background:"var(--bg-surf)"}}>
               <div style={{fontSize:"52px",opacity:.15}}>🏘️</div>
               <div style={{fontSize:"18px",fontWeight:700,color:"var(--t3)"}}>Smart Property Search</div>

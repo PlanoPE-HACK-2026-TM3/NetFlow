@@ -9,71 +9,101 @@
 ═══════════════════════════════════════════════════════════ */
 
 :root {
-  /* Backgrounds */
-  --bg-base:  #0d0f1a;
-  --bg-surf:  #131620;
-  --bg-raise: #1a1d2e;
-  --bg-hover: #1e2235;
+  /* ── DARK THEME ──────────────────────────────────────────────
+     Base: deep cool navy  |  Primary: electric indigo-blue
+     5-card palette: bold RGB hues that pop on dark bg
+     Semantic: pure RGB green / amber / red (no tints)
+  ─────────────────────────────────────────────────────────── */
 
-  /* Borders */
-  --bd:     rgba(139,92,246,0.18);
-  --bd-hi:  rgba(139,92,246,0.45);
+  /* Backgrounds — true dark navy, not purple-tinted */
+  --bg-base:  #0a0e1a;
+  --bg-surf:  #111827;
+  --bg-raise: #1c2333;
+  --bg-hover: #232d42;
 
-  /* Text */
-  --t1: #f1f5f9;
-  --t2: #cbd5e1;
-  --t3: #64748b;
-  --t4: #334155;
+  /* Borders — cool blue-grey */
+  --bd:    rgba(99,120,180,0.20);
+  --bd-hi: rgba(99,120,220,0.50);
 
-  /* Brand */
-  --pri:    #7c3aed;
-  --pri-hi: #8b5cf6;
+  /* Text — warm white to slate */
+  --t1: #f8fafc;
+  --t2: #c8d6e8;
+  --t3: #5e7494;
+  --t4: #2e3f55;
 
-  /* Semantic */
-  --grn: #10b981;
+  /* Brand — electric indigo */
+  --pri:    #4f6ef7;
+  --pri-hi: #7b93ff;
+
+  /* Semantic — pure RGB */
+  --grn: #22c55e;
   --amb: #f59e0b;
-  --red: #ef4444;
+  --red: #f43f5e;
   --cyn: #06b6d4;
-  --pnk: #f472b6;
+  --pnk: #e879f9;
 
   /* Shadows */
-  --shd:    0 4px 28px rgba(0,0,0,0.45);
-  --shd-sm: 0 2px 10px rgba(0,0,0,0.3);
+  --shd:    0 4px 28px rgba(0,0,0,0.55);
+  --shd-sm: 0 2px 10px rgba(0,0,0,0.35);
 
-  /* Sticky note palettes — 5 light-friendly pastels */
-  --n1-bg:#1c1640; --n1-tp:#c4b5fd; --n1-bd:rgba(196,181,253,0.30);
-  --n2-bg:#0d201b; --n2-tp:#6ee7b7; --n2-bd:rgba(110,231,183,0.30);
-  --n3-bg:#221a07; --n3-tp:#fde68a; --n3-bd:rgba(253,230,138,0.30);
-  --n4-bg:#091c24; --n4-tp:#67e8f9; --n4-bd:rgba(103,232,249,0.30);
-  --n5-bg:#1f1028; --n5-tp:#fbcfe8; --n5-bd:rgba(251,207,232,0.30);
+  /* ── 5 sticky note colours — vivid distinct RGB hues ──
+     1. Cobalt blue    2. Emerald green   3. Amber orange
+     4. Rose red       5. Violet purple
+  ───────────────────────────────────────────────────── */
+  --n1-bg: #0f1c38; --n1-tp: #4f9eff; --n1-bd: rgba(79,158,255,0.32);
+  --n2-bg: #0c2218; --n2-tp: #22c55e; --n2-bd: rgba(34,197,94,0.32);
+  --n3-bg: #231500; --n3-tp: #fb923c; --n3-bd: rgba(251,146,60,0.32);
+  --n4-bg: #24091a; --n4-tp: #f43f5e; --n4-bd: rgba(244,63,94,0.32);
+  --n5-bg: #1a0e30; --n5-tp: #a78bfa; --n5-bd: rgba(167,139,250,0.32);
 }
 
 [data-theme="light"] {
-  --bg-base:  #f0f4ff;
-  --bg-surf:  #ffffff;
-  --bg-raise: #f4f6fe;
-  --bg-hover: #eaecfb;
-  --bd:     rgba(99,102,241,0.18);
-  --bd-hi:  rgba(99,102,241,0.50);
-  --t1: #0f172a;
-  --t2: #1e293b;
-  --t3: #64748b;
-  --t4: #94a3b8;
-  --pri:    #6366f1;
-  --pri-hi: #4f46e5;
-  --grn: #059669;
-  --amb: #d97706;
-  --red: #dc2626;
-  --cyn: #0891b2;
-  --pnk: #db2777;
-  --shd:    0 4px 20px rgba(99,102,241,0.14);
-  --shd-sm: 0 2px 8px  rgba(99,102,241,0.09);
+  /* ── LIGHT THEME ─────────────────────────────────────────────
+     Base: clean white  |  Primary: vivid royal blue
+     5-card palette: saturated RGB colours on white — pop and punch
+     Semantic: full-saturation RGB (no washed-out pastels)
+  ─────────────────────────────────────────────────────────── */
 
-  --n1-bg:#ede9fe; --n1-tp:#7c3aed; --n1-bd:rgba(124,58,237,0.28);
-  --n2-bg:#d1fae5; --n2-tp:#059669; --n2-bd:rgba(5,150,105,0.28);
-  --n3-bg:#fef9c3; --n3-tp:#92400e; --n3-bd:rgba(146,64,14,0.25);
-  --n4-bg:#cffafe; --n4-tp:#0e7490; --n4-bd:rgba(14,116,148,0.25);
-  --n5-bg:#fce7f3; --n5-tp:#9d174d; --n5-bd:rgba(157,23,77,0.25);
+  /* Backgrounds — clean white, very light grey surfaces */
+  --bg-base:  #f1f5fb;
+  --bg-surf:  #ffffff;
+  --bg-raise: #f8f9ff;
+  --bg-hover: #edf0ff;
+
+  /* Borders — blue-grey with more presence */
+  --bd:    rgba(59,90,180,0.16);
+  --bd-hi: rgba(59,90,220,0.45);
+
+  /* Text — deep navy → mid grey */
+  --t1: #0d1b2e;
+  --t2: #1e3050;
+  --t3: #5c6e8a;
+  --t4: #9ba8bc;
+
+  /* Brand — vivid royal blue */
+  --pri:    #2563eb;
+  --pri-hi: #1d4ed8;
+
+  /* Semantic — saturated, WCAG-AA on white */
+  --grn: #16a34a;
+  --amb: #d97706;
+  --red: #e11d48;
+  --cyn: #0284c7;
+  --pnk: #c026d3;
+
+  /* Shadows — blue-tinted */
+  --shd:    0 4px 20px rgba(37,99,235,0.14);
+  --shd-sm: 0 2px 8px  rgba(37,99,235,0.09);
+
+  /* ── 5 sticky note colours — vivid saturated RGB on white ──
+     1. Royal blue     2. Forest green    3. Burnt orange
+     4. Crimson red    5. Deep violet
+  ───────────────────────────────────────────────────────── */
+  --n1-bg: #eff6ff; --n1-tp: #2563eb; --n1-bd: rgba(37,99,235,0.25);
+  --n2-bg: #f0fdf4; --n2-tp: #16a34a; --n2-bd: rgba(22,163,74,0.25);
+  --n3-bg: #fff7ed; --n3-tp: #ea580c; --n3-bd: rgba(234,88,12,0.25);
+  --n4-bg: #fff1f2; --n4-tp: #e11d48; --n4-bd: rgba(225,29,72,0.25);
+  --n5-bg: #faf5ff; --n5-tp: #7c3aed; --n5-bd: rgba(124,58,237,0.25);
 }
 
 /* ── Base ──────────────────────────────────────────────────── */
@@ -158,11 +188,11 @@
   background: var(--nb);
   border-color: var(--nbr);
 }
-.sticky-top.note-v { background: linear-gradient(90deg,#c4b5fd,#818cf8); }
-.sticky-top.note-g { background: linear-gradient(90deg,#6ee7b7,#34d399); }
-.sticky-top.note-a { background: linear-gradient(90deg,#fde68a,#fbbf24); }
-.sticky-top.note-c { background: linear-gradient(90deg,#67e8f9,#22d3ee); }
-.sticky-top.note-p { background: linear-gradient(90deg,#fbcfe8,#f9a8d4); }
+.sticky-top.note-v { background: linear-gradient(90deg,#4f9eff,#2563eb); }
+.sticky-top.note-g { background: linear-gradient(90deg,#22c55e,#16a34a); }
+.sticky-top.note-a { background: linear-gradient(90deg,#fb923c,#ea580c); }
+.sticky-top.note-c { background: linear-gradient(90deg,#f43f5e,#e11d48); }
+.sticky-top.note-p { background: linear-gradient(90deg,#a78bfa,#7c3aed); }
 
 /* ── Tooltip ──────────────────────────────────────────────── */
 .tip-wrap {

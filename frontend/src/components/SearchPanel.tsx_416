@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { log } from "@/lib/logger";
 import type { SearchParams, ParsedPrompt } from "@/lib/types";
 import type { SearchRecord } from "@/lib/db";
 import { silentCorrect } from "@/lib/spellCorrect";
@@ -10,9 +9,9 @@ const API_BASE =
     ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:8000";
 
 const D = {
-  border: "var(--bd)", borderHi: "var(--bd-hi)",
-  text1: "var(--t1)", text2: "var(--t2)", text3: "var(--t3)",
-  primaryHi: "var(--pri-hi)", green: "var(--grn)", amber: "var(--amb)", red: "var(--red)",
+  border: "rgba(139,92,246,0.15)", borderHi: "rgba(139,92,246,0.4)",
+  text1: "#f1f5f9", text2: "#cbd5e1", text3: "#64748b",
+  primaryHi: "#8b5cf6", green: "#10b981", amber: "#f59e0b", red: "#ef4444",
 };
 
 const PROP_TYPES = [
@@ -91,7 +90,7 @@ const FL = ({ children }: { children:string }) => (
 const Div = () => <div style={{ height:"1px", background:"rgba(139,92,246,0.1)", margin:"6px 0" }} />;
 function Pill({ icon, val, color }: { icon:string; val:string; color:string }) {
   return (
-    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"var(--bg-raise)", border:"1px solid rgba(139,92,246,0.2)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
+    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(139,92,246,0.2)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
       {icon} {val}
     </span>
   );
@@ -234,7 +233,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const breakEven = Math.round(monthly*1.15);
 
   const inp: React.CSSProperties = {
-    background:"var(--bg-raise)", border:`1px solid ${D.border}`,
+    background:"rgba(255,255,255,0.04)", border:`1px solid ${D.border}`,
     borderRadius:"8px", padding:"10px 12px", color:D.text1, fontSize:"14px",
     fontFamily:"Inter,sans-serif", outline:"none", width:"100%", transition:"all 0.18s",
   };
@@ -242,7 +241,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     padding:"5px 10px", borderRadius:"7px", fontSize:"12px", fontWeight:600,
     border:`1px solid ${on ? D.borderHi : D.border}`,
     color: on ? D.primaryHi : D.text3,
-    background: on ? "rgba(139,92,246,0.12)" : "var(--bg-surf)",
+    background: on ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
     cursor:"pointer", transition:"all 0.15s", userSelect:"none",
     display:"flex", alignItems:"center", gap:"4px",
   });
@@ -272,7 +271,15 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       <div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"8px" }}>
           <SH icon="✨" label="Search Prompt" />
-          <div style={{ display:"flex", alignItems:"center", gap:"6px" }}/>
+          <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+            {parsing && (
+              <span style={{ fontSize:"10px", color:D.primaryHi, display:"flex", alignItems:"center", gap:"3px" }}>
+                <div style={{ width:"10px", height:"10px", border:"1.5px solid rgba(139,92,246,0.3)", borderTopColor:D.primaryHi, borderRadius:"50%", animation:"spin 0.75s linear infinite" }}/>
+                Parsing...
+              </span>
+            )}
+            {!parsing && parsed && hasText && <span style={{ fontSize:"10px", fontWeight:600, color:D.green }}>✅ Parsed</span>}
+          </div>
         </div>
 
         {/* Textarea — Grammarly suppressed, spellCheck off, browser UI disabled */}
@@ -345,13 +352,25 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
         )}
         {voiceErr && <div style={{ marginTop:"5px", fontSize:"11px", color:D.amber }}>⚠️ {voiceErr}</div>}
 
-
+        {/* Auto-parsed pills */}
+        {parsed && hasText && (
+          <div style={{ marginTop:"7px", padding:"8px 10px", borderRadius:"8px", background:"rgba(139,92,246,0.06)", border:"1px solid rgba(139,92,246,0.2)", display:"flex", flexWrap:"wrap", gap:"5px" }}>
+            <span style={{ fontSize:"10px", fontWeight:700, color:D.primaryHi, width:"100%", marginBottom:"2px" }}>✨ Auto-parsed:</span>
+            {parsed.zip_code        && <Pill icon="📮" val={parsed.zip_code}         color={D.green}/>}
+            {parsed.location_display && parsed.location_display !== parsed.zip_code &&
+              <Pill icon="📍" val={parsed.location_display} color={D.primaryHi}/>}
+            {parsed.budget          && <Pill icon="💰" val={`$${parsed.budget.toLocaleString()}`} color="#a78bfa"/>}
+            {parsed.min_beds        && <Pill icon="🛏️" val={`${parsed.min_beds}+ bd`}  color={D.text2}/>}
+            {parsed.property_type   && <Pill icon="🏠" val={parsed.property_type}     color={D.text2}/>}
+            {parsed.strategy        && <Pill icon="📅" val={parsed.strategy}           color={D.amber}/>}
+          </div>
+        )}
 
         {/* Quick example chips */}
         <div style={{ marginTop:"7px", display:"flex", flexWrap:"wrap", gap:"4px" }}>
           {["75070","Dallas TX $500k","Austin STR $400k","McKinney BRRRR","Houston flip $300k"].map(ex=>(
             <button key={ex} onClick={()=>setPrompt(ex)}
-              style={{ padding:"3px 8px", borderRadius:"5px", fontSize:"11px", border:`1px solid ${D.border}`, color:D.text3, background:"var(--bg-surf)", cursor:"pointer", transition:"all 0.15s" }}
+              style={{ padding:"3px 8px", borderRadius:"5px", fontSize:"11px", border:`1px solid ${D.border}`, color:D.text3, background:"rgba(255,255,255,0.02)", cursor:"pointer", transition:"all 0.15s" }}
               onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=D.borderHi;(e.currentTarget as HTMLButtonElement).style.color=D.primaryHi;}}
               onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=D.border;(e.currentTarget as HTMLButtonElement).style.color=D.text3;}}>
               {ex}
@@ -379,15 +398,15 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               <FL>ZIP Code</FL>
               <input style={inp} value={zipOver} onChange={e=>setZipOver(e.target.value.replace(/\D/g,"").slice(0,5))}
                 placeholder="e.g. 75070  (blank = from prompt)"
-                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(124,58,237,0.06)";}}
-                onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
+                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(139,92,246,0.06)";}}
+                onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="rgba(255,255,255,0.04)";}}/>
             </div>
             <div>
               <FL>Max Budget</FL>
               <input style={inp} value={budgetOver} onChange={e=>setBudgetOver(e.target.value)}
                 placeholder="e.g. 450000  (blank = from prompt)"
-                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(124,58,237,0.06)";}}
-                onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
+                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(139,92,246,0.06)";}}
+                onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="rgba(255,255,255,0.04)";}}/>
             </div>
             <div>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"6px" }}>
@@ -441,7 +460,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
       {/* ── EFFECTIVE PARAMS PREVIEW ─────────────── */}
       {hasText && (
-        <div style={{ padding:"8px 10px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}` }}>
+        <div style={{ padding:"8px 10px", borderRadius:"8px", background:"rgba(255,255,255,0.02)", border:`1px solid ${D.border}` }}>
           <div style={{ fontSize:"10px", fontWeight:700, color:D.text3, marginBottom:"5px", textTransform:"uppercase", letterSpacing:"0.6px" }}>Will search with:</div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
             <Pill icon="📮" val={finalZip}              color={zipOver    ? D.amber : D.green}/>
@@ -480,9 +499,9 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
                 {searchHistory.slice(0, 15).map((h, i) => (
                   <div key={h.id ?? i}
                     onClick={() => { setPrompt(h.prompt); onHistorySelect(h.prompt); setShowHist(false); }}
-                    style={{ padding:"9px 11px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}`, cursor:"pointer", transition:"all 0.15s" }}
+                    style={{ padding:"9px 11px", borderRadius:"8px", background:"rgba(255,255,255,0.03)", border:`1px solid ${D.border}`, cursor:"pointer", transition:"all 0.15s" }}
                     onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(139,92,246,0.08)";(e.currentTarget as HTMLDivElement).style.borderColor=D.borderHi;}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background="var(--bg-surf)";(e.currentTarget as HTMLDivElement).style.borderColor=D.border;}}>
+                    onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(255,255,255,0.03)";(e.currentTarget as HTMLDivElement).style.borderColor=D.border;}}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px" }}>
                       <div style={{ fontSize:"12px", fontWeight:600, color:D.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
                         🔍 {h.prompt}
@@ -512,7 +531,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
         <SH icon="📊" label="Market Snapshot"/>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"7px" }}>
           {[{icon:"🏦",val:"7.2%",lbl:"30yr Rate",c:D.red},{icon:"📈",val:"5.8%",lbl:"Avg Cap",c:D.green},{icon:"💰",val:"$2,140",lbl:"Median Rent",c:D.primaryHi},{icon:"📅",val:"28d",lbl:"Avg DOM",c:D.amber}].map(s=>(
-            <div key={s.lbl} style={{ padding:"11px",borderRadius:"9px",background:"var(--bg-surf)",border:`1px solid ${D.border}` }}>
+            <div key={s.lbl} style={{ padding:"11px",borderRadius:"9px",background:"rgba(255,255,255,0.03)",border:`1px solid ${D.border}` }}>
               <div style={{ fontSize:"15px",marginBottom:"2px" }}>{s.icon}</div>
               <div style={{ fontSize:"16px",fontWeight:800,color:s.c,fontFamily:"'JetBrains Mono',monospace" }}>{s.val}</div>
               <div style={{ fontSize:"10px",color:D.text3,fontWeight:500 }}>{s.lbl}</div>
@@ -526,7 +545,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       {/* ── MORTGAGE CALCULATOR ──────────────────── */}
       <div>
         <SH icon="🧮" label="Mortgage Calculator"/>
-        <div style={{ background:"var(--bg-surf)",border:`1px solid ${D.border}`,borderRadius:"9px",padding:"12px" }}>
+        <div style={{ background:"rgba(255,255,255,0.03)",border:`1px solid ${D.border}`,borderRadius:"9px",padding:"12px" }}>
           {[["🏷️","Price",`$${price.toLocaleString()}`,false],["⬇️","Down 20%",`$${Math.round(down).toLocaleString()}`,false],["🏦","Loan",`$${Math.round(loan).toLocaleString()}`,false],["💳","Monthly P&I",`$${monthly.toLocaleString()}`,true],["⚖️","Break-even",`$${breakEven.toLocaleString()}`,true]].map(([ic,l,v,b],i)=>(
             <div key={l as string} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<4?"1px solid rgba(139,92,246,0.07)":"none" }}>
               <span style={{ fontSize:"12px",color:D.text3,display:"flex",alignItems:"center",gap:"4px" }}><span>{ic}</span>{l}</span>

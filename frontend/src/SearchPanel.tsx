@@ -88,10 +88,10 @@ const SH = ({ icon, label }: { icon:string; label:string }) => (
 const FL = ({ children }: { children:string }) => (
   <div style={{ fontSize:"13px", fontWeight:600, color:D.text2, marginBottom:"6px" }}>{children}</div>
 );
-const Div = () => <div style={{ height:"1px", background:"rgba(139,92,246,0.1)", margin:"6px 0" }} />;
+const Div = () => <div style={{ height:"1px", background:"rgba(79,158,255,0.10)", margin:"6px 0" }} />;
 function Pill({ icon, val, color }: { icon:string; val:string; color:string }) {
   return (
-    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"var(--bg-raise)", border:"1px solid rgba(139,92,246,0.2)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
+    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"var(--bg-raise)", border:"1px solid rgba(79,158,255,0.20)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
       {icon} {val}
     </span>
   );
@@ -242,7 +242,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     padding:"5px 10px", borderRadius:"7px", fontSize:"12px", fontWeight:600,
     border:`1px solid ${on ? D.borderHi : D.border}`,
     color: on ? D.primaryHi : D.text3,
-    background: on ? "rgba(139,92,246,0.12)" : "var(--bg-surf)",
+    background: on ? "rgba(79,158,255,0.12)" : "var(--bg-surf)",
     cursor:"pointer", transition:"all 0.15s", userSelect:"none",
     display:"flex", alignItems:"center", gap:"4px",
   });
@@ -298,9 +298,9 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               ...inp, resize:"none", lineHeight:1.6,
               paddingRight:"44px",
               borderColor: isZip   ? "rgba(16,185,129,0.45)" :
-                           hasText ? "rgba(139,92,246,0.4)"  : D.border,
+                           hasText ? "rgba(79,158,255,0.40)"  : D.border,
               boxShadow:   isZip   ? "0 0 0 3px rgba(16,185,129,0.08)" :
-                           hasText ? "0 0 0 3px rgba(139,92,246,0.1)"  : "none",
+                           hasText ? "0 0 0 3px rgba(79,158,255,0.10)"  : "none",
             }}
           />
 
@@ -312,7 +312,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               style={{
                 position:"absolute", top:"8px", right:"8px",
                 width:"28px", height:"28px", borderRadius:"50%",
-                background: listening ? "rgba(239,68,68,0.9)" : "rgba(139,92,246,0.15)",
+                background: listening ? "rgba(239,68,68,0.9)" : "rgba(79,158,255,0.14)",
                 border: `1px solid ${listening ? "rgba(239,68,68,0.6)" : D.border}`,
                 display:"flex", alignItems:"center", justifyContent:"center",
                 cursor:"pointer", transition:"all 0.2s",
@@ -379,14 +379,14 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               <FL>ZIP Code</FL>
               <input style={inp} value={zipOver} onChange={e=>setZipOver(e.target.value.replace(/\D/g,"").slice(0,5))}
                 placeholder="e.g. 75070  (blank = from prompt)"
-                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(124,58,237,0.06)";}}
+                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
                 onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
             </div>
             <div>
               <FL>Max Budget</FL>
               <input style={inp} value={budgetOver} onChange={e=>setBudgetOver(e.target.value)}
                 placeholder="e.g. 450000  (blank = from prompt)"
-                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(124,58,237,0.06)";}}
+                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
                 onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
             </div>
             <div>
@@ -429,11 +429,11 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       {/* ── SEARCH BUTTON ─────────────────────────── */}
       <button onClick={handleSearch} disabled={loading||!hasText}
         style={{ width:"100%", padding:"13px", borderRadius:"10px",
-          background: loading||!hasText?"rgba(139,92,246,0.3)":"linear-gradient(135deg,#7c3aed,#6d28d9)",
-          border:"1px solid rgba(139,92,246,0.4)", color:"#fff", fontSize:"15px", fontWeight:700,
+          background: loading||!hasText?"rgba(79,158,255,0.28)":"linear-gradient(135deg,#2563eb,#1e40af)",
+          border:"1px solid rgba(79,158,255,0.40)", color:"#fff", fontSize:"15px", fontWeight:700,
           cursor:loading||!hasText?"not-allowed":"pointer", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center", gap:"8px",
-          boxShadow:loading||!hasText?"none":"0 4px 20px rgba(124,58,237,0.4)", transition:"all 0.2s" }}>
+          boxShadow:loading||!hasText?"none":"0 4px 20px rgba(37,99,235,0.38)", transition:"all 0.2s" }}>
         {loading
           ? <><div style={{ width:"15px",height:"15px",border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.75s linear infinite" }}/>{statusMsg||"Analyzing..."}</>
           : <>🔍 Find Top 10 Properties</>}
@@ -463,7 +463,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
           <SH icon="🕑" label="Search History" />
           <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"8px" }}>
             {searchHistory.length > 0 && (
-              <span style={{ fontSize:"10px", fontWeight:700, background:"rgba(139,92,246,0.3)", color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>
+              <span style={{ fontSize:"10px", fontWeight:700, background:"rgba(79,158,255,0.28)", color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>
                 {searchHistory.length}
               </span>
             )}
@@ -481,7 +481,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
                   <div key={h.id ?? i}
                     onClick={() => { setPrompt(h.prompt); onHistorySelect(h.prompt); setShowHist(false); }}
                     style={{ padding:"9px 11px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}`, cursor:"pointer", transition:"all 0.15s" }}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(139,92,246,0.08)";(e.currentTarget as HTMLDivElement).style.borderColor=D.borderHi;}}
+                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(79,158,255,0.08)";(e.currentTarget as HTMLDivElement).style.borderColor=D.borderHi;}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background="var(--bg-surf)";(e.currentTarget as HTMLDivElement).style.borderColor=D.border;}}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px" }}>
                       <div style={{ fontSize:"12px", fontWeight:600, color:D.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
@@ -528,7 +528,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
         <SH icon="🧮" label="Mortgage Calculator"/>
         <div style={{ background:"var(--bg-surf)",border:`1px solid ${D.border}`,borderRadius:"9px",padding:"12px" }}>
           {[["🏷️","Price",`$${price.toLocaleString()}`,false],["⬇️","Down 20%",`$${Math.round(down).toLocaleString()}`,false],["🏦","Loan",`$${Math.round(loan).toLocaleString()}`,false],["💳","Monthly P&I",`$${monthly.toLocaleString()}`,true],["⚖️","Break-even",`$${breakEven.toLocaleString()}`,true]].map(([ic,l,v,b],i)=>(
-            <div key={l as string} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<4?"1px solid rgba(139,92,246,0.07)":"none" }}>
+            <div key={l as string} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<4?"1px solid rgba(79,158,255,0.07)":"none" }}>
               <span style={{ fontSize:"12px",color:D.text3,display:"flex",alignItems:"center",gap:"4px" }}><span>{ic}</span>{l}</span>
               <span style={{ fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",fontWeight:b?700:500,color:b?D.primaryHi:D.text2 }}>{v}</span>
             </div>

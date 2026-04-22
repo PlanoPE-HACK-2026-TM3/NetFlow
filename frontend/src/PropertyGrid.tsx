@@ -11,22 +11,22 @@ interface Props {
 
 // ── Score metadata ─────────────────────────────────────────────
 function scoreInfo(s: number) {
-  if (s >= 85) return { icon:"🏆", label:"Excellent", color:"var(--grn)",    bg:"rgba(16,185,129,0.12)",  bd:"rgba(16,185,129,0.35)"  };
-  if (s >= 70) return { icon:"⭐", label:"Strong",    color:"var(--pri-hi)", bg:"rgba(139,92,246,0.12)", bd:"rgba(139,92,246,0.35)"  };
-  if (s >= 55) return { icon:"✅", label:"Good",      color:"var(--cyn)",    bg:"rgba(6,182,212,0.10)",  bd:"rgba(6,182,212,0.30)"   };
-  if (s >= 40) return { icon:"⚠️", label:"Fair",      color:"var(--amb)",    bg:"rgba(245,158,11,0.10)", bd:"rgba(245,158,11,0.30)"  };
-  return             { icon:"❌", label:"Weak",       color:"var(--red)",    bg:"rgba(239,68,68,0.10)",  bd:"rgba(239,68,68,0.30)"   };
+  if (s >= 85) return { icon:"🏆", label:"Excellent", color:"var(--grn)",    bg:"rgba(34,197,94,0.12)",   bd:"rgba(34,197,94,0.35)"   };
+  if (s >= 70) return { icon:"⭐", label:"Strong",    color:"var(--pri-hi)", bg:"rgba(79,158,255,0.12)",  bd:"rgba(79,158,255,0.35)"  };
+  if (s >= 55) return { icon:"✅", label:"Good",      color:"var(--cyn)",    bg:"rgba(6,182,212,0.12)",   bd:"rgba(6,182,212,0.32)"   };
+  if (s >= 40) return { icon:"⚠️", label:"Fair",      color:"var(--amb)",    bg:"rgba(245,158,11,0.12)",  bd:"rgba(245,158,11,0.32)"  };
+  return             { icon:"❌", label:"Weak",       color:"var(--red)",    bg:"rgba(244,63,94,0.12)",   bd:"rgba(244,63,94,0.32)"   };
 }
 
 // Note colour class cycles by rank
 const NOTE_CLS  = ["note-v","note-g","note-a","note-c","note-p"];
 const NOTE_TOPS = ["var(--n1-tp)","var(--n2-tp)","var(--n3-tp)","var(--n4-tp)","var(--n5-tp)"];
 const NOTE_GRADS = [
-  "linear-gradient(90deg,#c4b5fd,#818cf8)",
-  "linear-gradient(90deg,#6ee7b7,#34d399)",
-  "linear-gradient(90deg,#fde68a,#fbbf24)",
-  "linear-gradient(90deg,#67e8f9,#22d3ee)",
-  "linear-gradient(90deg,#fbcfe8,#f9a8d4)",
+  "linear-gradient(135deg,#4f9eff,#2563eb)",
+  "linear-gradient(135deg,#22c55e,#16a34a)",
+  "linear-gradient(135deg,#fb923c,#ea580c)",
+  "linear-gradient(135deg,#f43f5e,#e11d48)",
+  "linear-gradient(135deg,#a78bfa,#7c3aed)",
 ];
 
 const cfColor  = (v:number) => v>300?"var(--grn)":v>0?"var(--amb)":"var(--red)";
@@ -36,10 +36,10 @@ const cfIcon   = (v:number) => v>400?"💎":v>200?"💚":v>0?"🟡":"🔴";
 const capIcon  = (v:number) => v>=6?"🚀":v>=4.5?"📈":"📉";
 
 function tagStyle(t:string):React.CSSProperties {
-  if (t.includes("Pick")||t.includes("🏆"))  return {background:"rgba(139,92,246,.15)",border:"1px solid rgba(139,92,246,.35)",color:"var(--pri-hi)"};
-  if (t.includes("Hot")||t.includes("🔥"))   return {background:"rgba(245,158,11,.12)",border:"1px solid rgba(245,158,11,.3)",color:"var(--amb)"};
-  if (t.includes("Cash+"))                   return {background:"rgba(16,185,129,.12)",border:"1px solid rgba(16,185,129,.3)",color:"var(--grn)"};
-  return {background:"rgba(128,128,128,.08)",border:"1px solid var(--bd)",color:"var(--t3)"};
+  if (t.includes("Pick")||t.includes("🏆"))  return {background:"rgba(79,158,255,.15)",border:"1px solid rgba(79,158,255,.35)",color:"var(--pri-hi)"};
+  if (t.includes("Hot")||t.includes("🔥"))   return {background:"rgba(251,146,60,.14)",border:"1px solid rgba(251,146,60,.35)",color:"var(--amb)"};
+  if (t.includes("Cash+"))                   return {background:"rgba(34,197,94,.13)",border:"1px solid rgba(34,197,94,.32)",color:"var(--grn)"};
+  return {background:"rgba(100,120,160,.08)",border:"1px solid var(--bd)",color:"var(--t3)"};
 }
 
 // ── Tooltip with keyboard focus + click toggle ─────────────────
@@ -92,7 +92,7 @@ function MapEmbed({ address, zip }:{ address:string; zip:string }) {
   const q = encodeURIComponent(`${address}, ${zip}`);
   return (
     <div style={{borderRadius:"8px",overflow:"hidden",border:"1px solid var(--bd-hi)",marginTop:"10px"}}>
-      <div style={{padding:"5px 10px",background:"rgba(139,92,246,0.08)",borderBottom:"1px solid var(--bd)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{padding:"5px 10px",background:"rgba(79,158,255,0.08)",borderBottom:"1px solid var(--bd)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <span style={{fontSize:"11px",fontWeight:600,color:"var(--pri-hi)"}}>📍 Google Maps</span>
         <a href={`https://maps.google.com/?q=${q}`} target="_blank" rel="noopener noreferrer" style={{fontSize:"10px",color:"var(--t3)",textDecoration:"none"}}>Open ↗</a>
       </div>
@@ -128,7 +128,7 @@ function MLSPanel({ p }:{ p:Property }) {
           ["🔗 Realtor", `https://www.realtor.com/realestateandhomes-search/${p.zip_code}`],
         ].map(([lbl,url])=>(
           <a key={String(lbl)} href={String(url)} target="_blank" rel="noopener noreferrer"
-            style={{padding:"4px 9px",borderRadius:"6px",fontSize:"11px",fontWeight:600,background:"rgba(139,92,246,.12)",border:"1px solid var(--bd-hi)",color:"var(--pri-hi)",textDecoration:"none"}}>
+            style={{padding:"4px 9px",borderRadius:"6px",fontSize:"11px",fontWeight:600,background:"rgba(79,158,255,.12)",border:"1px solid var(--bd-hi)",color:"var(--pri-hi)",textDecoration:"none"}}>
             {lbl}
           </a>
         ))}

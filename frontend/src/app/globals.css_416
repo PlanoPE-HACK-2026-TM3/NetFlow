@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0d0f1a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ── Dark theme tokens ─────────────────────────────────────────
+   bg-base:    #0d0f1a   deepest background
+   bg-surface: #131620   cards / panels
+   bg-raised:  #1a1d2e   elevated surfaces
+   bg-hover:   #1e2235   hover state
+   border:     rgba(139,92,246,0.15)  subtle violet border
+   border-hi:  rgba(139,92,246,0.35)  active border
+   primary:    #7c3aed   violet-600
+   primary-hi: #8b5cf6   violet-500  (hover / glow)
+   accent:     #06b6d4   cyan
+   text-1:     #f1f5f9   near-white
+   text-2:     #cbd5e1   light slate
+   text-3:     #64748b   mid slate
+   text-4:     #334155   dim slate
+   green:      #10b981   emerald
+   amber:      #f59e0b
+   red:        #ef4444
+──────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0d0f1a; }
+::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #7c3aed; }
+
+.ai-typing {
+  display: inline-block;
+  width: 5px; height: 15px;
+  background: #8b5cf6;
+  animation: blink 1s infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+  border-radius: 2px;
+}
+@keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+
+.spinner {
+  width: 38px; height: 38px;
+  border: 3px solid rgba(139,92,246,0.15);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.score-bar-fill { transition: width 0.9s cubic-bezier(.4,0,.2,1); }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.msg-in { animation: fadeUp 0.22s ease forwards; }
+
+/* Glow on hover for cards */
+.prop-card:hover {
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.3), 0 8px 32px rgba(124,58,237,0.15) !important;
+}
+.prop-card-selected {
+  box-shadow: 0 0 0 2px rgba(139,92,246,0.6), 0 8px 32px rgba(124,58,237,0.25) !important;
+}
+
+/* Voice input bar animation */
+@keyframes voiceBar {
+  from { height: 4px; opacity: 0.5; }
+  to   { height: 14px; opacity: 1; }
+}

@@ -41,7 +41,8 @@ OLLAMA_MODEL: str    = os.getenv("OLLAMA_MODEL", "llama3")
 # DEMO_MODE=true  → mock data, rule-based scoring (no Ollama, no APIs)
 # DEMO_MODE=false → live RentCast + FRED data; Ollama always used for AI scoring
 #                   Falls back to mock data gracefully if API keys absent
-DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
+DEMO_MODE:  bool = os.getenv("DEMO_MODE",  "false").lower() == "true"
+DEBUG_MODE: bool = os.getenv("DEBUG",      "false").lower() in ("true","1","yes")
 
 # Whether live APIs are available (informational — used for status messages)
 LIVE_DATA: bool = bool(RENTCAST_API_KEY and FRED_API_KEY)

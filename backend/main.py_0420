@@ -8,45 +8,23 @@ Routes:
   GET  /api/market/{zip}    — market snapshot
   GET  /api/rate-history    — mortgage rate history
   GET  /health
-
-Debug logging:
-  Set DEBUG=true in .env (or env var) to enable:
-    • Full request/response logging with request IDs
-    • Agent stage timings and tool call arguments
-    • Cache hit/miss events
-    • SSE token stream debug
-    • All logs written to logs/netflow_debug.log
 """
 
 import json
-import logging
 import re
 import asyncio
-import time
-import uuid
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-# ── Configure logging FIRST — before any other netflow import ──
-from backend.logger import configure_logging
-from backend.config import ALLOWED_ORIGINS, DEMO_MODE, DEBUG_MODE, RENTCAST_API_KEY, FRED_API_KEY, LANGCHAIN_API_KEY
-
-_debug_active = configure_logging(debug=DEBUG_MODE)
-
+from backend.config import ALLOWED_ORIGINS, DEMO_MODE, RENTCAST_API_KEY, FRED_API_KEY, LANGCHAIN_API_KEY
 from backend.agents.netflow_agent import NetFlowAgent
-from backend.agents.user_agent import user_agent, ValidationStatus, Intent
 from backend.services.rentcast import RentCastService
 from backend.services.fred import FREDService
-
-log         = logging.getLogger("netflow.request")
-log_startup = logging.getLogger("netflow.startup")
-log_sse     = logging.getLogger("netflow.sse")
-log_cache   = logging.getLogger("netflow.cache")
 
 
 # ── City → ZIP lookup ─────────────────────────────────────────
@@ -178,110 +156,12 @@ def parse_prompt_to_params(text: str) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Full startup diagnostic (always printed + logged) ─────
-    import urllib.request as _ur
-    from backend.config import OLLAMA_BASE_URL, OLLAMA_MODEL
-
-    mode         = "DEMO (mock)" if DEMO_MODE else "LIVE (RentCast + FRED)"
-    debug_str    = " | DEBUG logging ON" if _debug_active else ""
-    has_rentcast = bool(RENTCAST_API_KEY)
-    has_fred     = bool(FRED_API_KEY)
-    has_langsmith= bool(LANGCHAIN_API_KEY)
-
-    # Ollama check
-    ollama_ok = False
-    try:
-        _ur.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-        ollama_ok = True
-    except Exception:
-        pass
-
-    # ── Banner ────────────────────────────────────────────────
-    banner = f"""
-╔══════════════════════════════════════════════════════════╗
-║  🏘️  NetFlow API  v1.0                                   ║
-╠══════════════════════════════════════════════════════════╣
-║  Mode       : {mode:<42} ║
-║  Debug      : {"ON  → logs/netflow_debug.log" if _debug_active else "OFF (set DEBUG=true in .env)":<42} ║
-╠══════════════════════════════════════════════════════════╣
-║  Services                                               ║
-║    Ollama   : {"✅ online  " + OLLAMA_MODEL:<42} ║
-║    RentCast : {"✅ live API" if has_rentcast else "⚠️  mock data (add RENTCAST_API_KEY)":<42} ║
-║    FRED     : {"✅ live API" if has_fred else "⚠️  mock data (add FRED_API_KEY)":<42} ║
-║    LangSmith: {"✅ tracing ON" if has_langsmith else "○  off (add LANGCHAIN_API_KEY)":<42} ║
-╠══════════════════════════════════════════════════════════╣
-║  Endpoints                                              ║
-║    API      : http://localhost:8000                     ║
-║    Docs     : http://localhost:8000/docs                ║
-║    Health   : http://localhost:8000/health              ║
-║    MCP      : python -m backend.mcp.server              ║
-╚══════════════════════════════════════════════════════════╝"""
-    print(banner)
-
-    log_startup.info(
-        "NetFlow startup complete | mode=%s | ollama=%s | rentcast=%s | fred=%s | debug=%s",
-        mode,
-        "online" if ollama_ok else "offline",
-        "live"   if has_rentcast else "mock",
-        "live"   if has_fred     else "mock",
-        _debug_active,
-    )
-    if not ollama_ok:
-        log_startup.warning(
-            "Ollama not reachable at %s — scoring will use rule-based fallback. "
-            "Start with: ollama serve", OLLAMA_BASE_URL
-        )
-    if _debug_active:
-        log_startup.debug(
-            "Debug log file: logs/netflow_debug.log | "
-            "All tool args, stage timings, cache events will be recorded"
-        )
-
+    mode = "DEMO (mock)" if DEMO_MODE else "LIVE (RentCast + FRED)"
+    print(f"\n🏘️  NetFlow API — {mode}\n")
     yield
-
-    log_startup.info("NetFlow API shutting down")
 
 
 app = FastAPI(title="NetFlow API", version="1.0.0", lifespan=lifespan)
-
-
-@app.middleware("http")
-async def request_logger_middleware(request: Request, call_next):
-    """
-    Log every HTTP request with a unique request ID.
-    In debug mode: log headers, query params, and response time.
-    In normal mode: log method, path, status, duration only.
-    """
-    req_id  = uuid.uuid4().hex[:8]
-    t_start = time.perf_counter()
-
-    # Attach req_id to request state so SSE handlers can reference it
-    request.state.req_id = req_id
-
-    log.info(
-        "→ %s %s",
-        request.method, request.url.path,
-        extra={"req_id": req_id},
-    )
-    if _debug_active:
-        log.debug(
-            "  headers=%s  params=%s",
-            dict(request.headers),
-            dict(request.query_params),
-            extra={"req_id": req_id},
-        )
-
-    response = await call_next(request)
-
-    duration_ms = round((time.perf_counter() - t_start) * 1000, 1)
-    log.info(
-        "← %s %s  status=%d  %.1fms",
-        request.method, request.url.path, response.status_code, duration_ms,
-        extra={"req_id": req_id, "duration_ms": duration_ms},
-    )
-    return response
-
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -305,7 +185,6 @@ class SearchRequest(BaseModel):
     property_type: str = "SFH"
     min_beds:      int = 3
     strategy:      str = "LTR"
-    session_id:    str = ""   # optional; used for rate limiting
 
     def resolve(self) -> dict:
         result = {
@@ -358,31 +237,6 @@ async def health():
         "live_data":    bool(RENTCAST_API_KEY and FRED_API_KEY),
         "agent_stages": ["financial_enrichment","llm_scoring","strategy_rerank","risk_screen","narrative"],
         "langsmith":    bool(LANGCHAIN_API_KEY),
-        "model":        OLLAMA_MODEL if ollama_ok else "",
-    }
-
-
-@app.get("/mcp/health")
-async def mcp_health():
-    """MCP server status — also reachable from main FastAPI process."""
-    from backend.mcp.server import TOOLS, _GUARD_PATTERNS
-    return {
-        "mcp_server":     "netflow-mcp v1.0",
-        "tools":          [t["name"] for t in TOOLS],
-        "tool_count":     len(TOOLS),
-        "guard_patterns": len(_GUARD_PATTERNS),
-        "transports":     ["stdio (Claude Desktop)", "sse (HTTP port 8001)"],
-        "config":         "backend/mcp/claude_desktop_config.json",
-    }
-
-
-@app.get("/api/user-agent/audit")
-async def user_agent_audit(last_n: int = 50):
-    """Return UserAgent audit log — last N validation decisions."""
-    return {
-        "audit_log":         user_agent.get_audit_log(last_n),
-        "injection_patterns": len(__import__('backend.agents.user_agent',
-                                  fromlist=['INJECTION_PATTERNS']).INJECTION_PATTERNS),
     }
 
 
@@ -457,12 +311,6 @@ async def observability():
 
 @app.post("/api/parse-prompt")
 async def parse_prompt_endpoint(req: ParseRequest):
-    # PromptGuard: apply injection filter even on the parse endpoint
-    from backend.mcp.server import prompt_guard
-    guard = prompt_guard("parse_prompt", {"prompt": req.prompt})
-    if not guard.passed:
-        raise HTTPException(status_code=400,
-            detail=f"Request blocked: {guard.code} — use plain real estate queries.")
     return parse_prompt_to_params(req.prompt)
 
 
@@ -470,37 +318,6 @@ async def parse_prompt_endpoint(req: ParseRequest):
 async def search_stream(req: SearchRequest):
     async def event_generator():
         try:
-            # ── UserAgent: validate + sanitise + classify ─────
-            raw_prompt = req.prompt_text.strip()
-            if raw_prompt:
-                validated = user_agent.process(
-                    raw_text   = raw_prompt,
-                    session_id = req.session_id,
-                )
-                if validated.status == ValidationStatus.REJECTED:
-                    yield _sse("error", {
-                        "msg":     validated.clarification_msg or "Request blocked.",
-                        "code":    validated.rejection_reason,
-                        "stage":   validated.stage_reached,
-                    })
-                    return
-                if validated.status in (ValidationStatus.NEEDS_INFO,
-                                        ValidationStatus.CLARIFY):
-                    yield _sse("clarify", {
-                        "msg":              validated.clarification_msg,
-                        "suggested_prompt": validated.suggested_prompt,
-                        "intent":           validated.intent.value,
-                    })
-                    return
-                # Merge validated params back into request
-                # (only override if regex found something)
-                if validated.zip_code:       req.zip_code      = validated.zip_code
-                if validated.location:       req.location      = validated.location
-                if validated.budget != 450000: req.budget       = validated.budget
-                if validated.min_beds != 3:  req.min_beds      = validated.min_beds
-                req.property_type = validated.property_type
-                req.strategy      = validated.strategy
-
             p         = req.resolve()
             zip_code  = p["zip_code"]
             budget    = p["budget"]
@@ -508,12 +325,6 @@ async def search_stream(req: SearchRequest):
             min_beds  = p["min_beds"]
             strategy  = p["strategy"]
             loc_disp  = p["location_display"]
-
-            req_id = getattr(getattr(req, "state", None), "req_id", uuid.uuid4().hex[:8])
-            log.info("SSE search start | zip=%s budget=%d strategy=%s",
-                     zip_code, budget, strategy, extra={"req_id": req_id})
-            if _debug_active:
-                log.debug("SSE full params: %s", p, extra={"req_id": req_id})
 
             yield _sse("status", {"msg": f"🔍 Searching {loc_disp} — fetching rate & listings..."})
 
@@ -543,13 +354,6 @@ async def search_stream(req: SearchRequest):
                 fred_service=fred, rentcast_service=rentcast,
             )
 
-            log.info("SSE properties ready | count=%d zip=%s rate=%.2f%%",
-                     len(scored), zip_code, mortgage_rate,
-                     extra={"req_id": req_id})
-            if _debug_active:
-                log_sse.debug("SSE top-3 scores: %s",
-                    [(p.rank, p.address[:20], p.ai_score) for p in scored[:3]],
-                    extra={"req_id": req_id})
             yield _sse("properties", {
                 "data":             [p.model_dump() for p in scored[:10]],
                 "mortgage_rate":    mortgage_rate,
@@ -570,11 +374,9 @@ async def search_stream(req: SearchRequest):
             ):
                 yield _sse("ai_token", {"token": token})
 
-            log.info("SSE stream complete", extra={"req_id": req_id})
             yield _sse("done", {})
 
         except Exception as exc:
-            log.error("SSE stream error: %s", exc, extra={"req_id": req_id})
             yield _sse("error", {"msg": str(exc)})
 
     return StreamingResponse(
@@ -642,23 +444,9 @@ class OllamaChatRequest(BaseModel):
 async def ollama_chat(req: OllamaChatRequest):
     """
     Proxy POST to local Ollama /api/chat endpoint.
-    UserAgent validates the last user message before forwarding.
+    Used by PropertyChat when ANTHROPIC_API_KEY is not set.
     """
     from backend.config import OLLAMA_BASE_URL, OLLAMA_MODEL
-
-    # Validate last user message through UserAgent security pipeline
-    last_user_msg = next(
-        (m["content"] for m in reversed(req.messages) if m.get("role") == "user"),
-        ""
-    )
-    if last_user_msg:
-        validated = user_agent.process(raw_text=last_user_msg, session_id="chat")
-        if validated.status == ValidationStatus.REJECTED:
-            raise HTTPException(
-                status_code=400,
-                detail=validated.clarification_msg or "Message blocked by security policy."
-            )
-
     model = req.model or OLLAMA_MODEL
     payload = {
         "model":    model,
