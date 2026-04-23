@@ -82,7 +82,7 @@ if LANGCHAIN_API_KEY:
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"]    = LANGCHAIN_PROJECT
     os.environ["LANGCHAIN_ENDPOINT"]   = LANGCHAIN_ENDPOINT
-    os.environ["LANGSMITH_TRACING"]    = "true"   # NOT _V2 — that was a bug
+    os.environ["LANGSMITH_TRACING"]    = "true"   # NOT _V2 — that was a classic traditional version
     os.environ["LANGSMITH_API_KEY"]    = LANGCHAIN_API_KEY
     os.environ["LANGSMITH_PROJECT"]    = LANGCHAIN_PROJECT
     os.environ["LANGSMITH_ENDPOINT"]   = LANGCHAIN_ENDPOINT
