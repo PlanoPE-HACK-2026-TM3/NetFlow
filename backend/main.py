@@ -345,7 +345,7 @@ async def health():
     import urllib.request
     ollama_ok = False
     try:
-        from backend.config import OLLAMA_BASE_URL, OLLAMA_MODEL
+        from backend.config import OLLAMA_BASE_URL
         urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
         ollama_ok = True
     except Exception:
@@ -563,12 +563,18 @@ async def search_stream(req: SearchRequest):
                 getattr(p, "__dict__", {})
                 for p in scored
             )
+            buf: list[str] = []
             async for token in agent.stream_market_summary(
                 zip_code=zip_code, budget=budget, strategy=strategy,
                 top_picks=scored[:3], mortgage_rate=mortgage_rate,
                 fallback_used=DEMO_MODE,
             ):
-                yield _sse("ai_token", {"token": token})
+                buf.append(token)
+                if len(buf) >= 5:
+                    yield _sse("ai_token", {"token": "".join(buf)})
+                    buf.clear()
+            if buf:
+                yield _sse("ai_token", {"token": "".join(buf)})
 
             log.info("SSE stream complete", extra={"req_id": req_id})
             yield _sse("done", {})

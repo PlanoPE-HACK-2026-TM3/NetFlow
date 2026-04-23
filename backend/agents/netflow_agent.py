@@ -59,12 +59,14 @@ OBSERVABILITY
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
+import httpx
 from pydantic import BaseModel, Field
 from tenacity import (
     retry, stop_after_attempt,
@@ -75,6 +77,14 @@ from backend.config import (
     OLLAMA_BASE_URL, OLLAMA_MODEL, DEMO_MODE,
     LANGCHAIN_API_KEY,
 )
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+    from langchain_ollama import ChatOllama
+    _LC_AVAILABLE = True
+except ImportError:
+    _LC_AVAILABLE = False
 
 log         = logging.getLogger("netflow.agent")
 log_market  = logging.getLogger("netflow.agent.market")
@@ -302,7 +312,8 @@ def compute_financials(listing: dict, mortgage_rate: float) -> dict:
     down          = price * 0.20
     loan          = price - down
     r             = mortgage_rate / 100 / 12
-    pi            = loan * (r*(1+r)**360)/((1+r)**360-1) if r>0 else loan/360
+    pn            = (1 + r) ** 360
+    pi            = loan * (r * pn) / (pn - 1) if r > 0 else loan / 360
     piti          = pi + price * 0.015 / 12
     cash_flow     = int(rent - piti - rent * 0.35)
     grm           = round(price / (rent*12), 1) if rent > 0 else 0.0
@@ -490,7 +501,6 @@ class MarketAnalystAgent:
             return cached
 
         # ── TOOL CALLS: parallel API fetch ────────────────────
-        import asyncio
         t0 = time.perf_counter()
 
         rate_task  = fred_service.get_30yr_rate()
@@ -538,9 +548,6 @@ class MarketAnalystAgent:
         pipeline_note: str = "Ollama llama3",
     ) -> AsyncIterator[str]:
         """Stage 4: Streaming narrative, grounded in live market data."""
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
-
         top  = top_picks[0] if top_picks else None
         mc   = ctx.market_ctx
         avgs = {
@@ -578,7 +585,6 @@ class MarketAnalystAgent:
                 yield chunk
         except Exception as e:
             log.warning("Narrative LLM failed: %s", e)
-            import asyncio
             for word in _rule_summary(ctx, budget, strategy, top_picks).split(" "):
                 yield word + " "
                 await asyncio.sleep(0.03)
@@ -646,9 +652,6 @@ class PropertyScorerAgent:
         One LLM call, all 10 properties.
         Compact 6-field input keeps prompt ≈ 300 tokens.
         """
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import JsonOutputParser
-
         compact  = [compact_for_llm(p) for p in ctx.enriched]
         prompt   = ChatPromptTemplate.from_messages([
             ("system", SCORING_SYSTEM),
@@ -883,10 +886,6 @@ class RiskAdvisorAgent:
         ctx: AgentContext,
     ) -> None:
         """Generate concise LLM risk memos for HIGH-risk properties."""
-        import asyncio
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", RISK_MEMO_SYSTEM),
             ("human",  RISK_MEMO_HUMAN),
@@ -943,27 +942,34 @@ class NetFlowAgent:
         self._market_agent   = MarketAnalystAgent()
         self._scorer_agent   = PropertyScorerAgent()
         self._risk_agent     = RiskAdvisorAgent()
+        self._ollama_ts: float = 0.0
+        self._ollama_ok: bool  = False
 
     # ── LLM client — lazy init, shared across agents ──────────
 
     def _get_llm(self):
         if self._llm is None:
-            from langchain_ollama import ChatOllama
             self._llm = ChatOllama(
                 model       = OLLAMA_MODEL,
                 temperature = 0.1,
                 base_url    = OLLAMA_BASE_URL,
-                num_predict = 600,
+                num_predict = 350,
             )
         return self._llm
 
-    def _ollama_available(self) -> bool:
-        import urllib.request
+    async def _check_ollama(self) -> bool:
+        """Async Ollama health check with 10s TTL — never blocks the event loop."""
+        now = time.time()
+        if now - self._ollama_ts < 10.0:
+            return self._ollama_ok
         try:
-            urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-            return True
+            async with httpx.AsyncClient(timeout=2.0) as c:
+                await c.get(f"{OLLAMA_BASE_URL}/api/tags")
+            self._ollama_ok = True
         except Exception:
-            return False
+            self._ollama_ok = False
+        self._ollama_ts = now
+        return self._ollama_ok
 
     # ── Main pipeline ─────────────────────────────────────────
 
@@ -990,8 +996,8 @@ class NetFlowAgent:
             listings  = listings,
         )
 
-        # ── Gate: check LLM availability once ─────────────────
-        ctx.llm_available = (not DEMO_MODE) and self._ollama_available()
+        # ── Gate: check LLM availability once (async, TTL-cached) ─
+        ctx.llm_available = (not DEMO_MODE) and await self._check_ollama()
         if not ctx.llm_available:
             log.warning("Ollama offline — all LLM stages will use rule-based fallback")
 
@@ -1070,7 +1076,6 @@ class NetFlowAgent:
         fallback_used: bool = False,
     ) -> AsyncIterator[str]:
         if DEMO_MODE:
-            import asyncio
             mc = MarketMemory.get(zip_code)
             ctx = AgentContext(zip_code=zip_code, budget=budget,
                                strategy=strategy, market_ctx=mc)
@@ -1081,13 +1086,13 @@ class NetFlowAgent:
 
         pipeline_note = "Rule-based fallback" if fallback_used else "Ollama llama3 — 3-agent pipeline"
         mc  = MarketMemory.get(zip_code)
+        llm_available = await self._check_ollama()
         ctx = AgentContext(zip_code=zip_code, budget=budget,
                            strategy=strategy, market_ctx=mc,
-                           llm_available=self._ollama_available())
-        llm = self._get_llm() if ctx.llm_available else None
+                           llm_available=llm_available)
+        llm = self._get_llm() if llm_available else None
 
-        if not ctx.llm_available:
-            import asyncio
+        if not llm_available:
             for word in _rule_summary(ctx, budget, strategy, top_picks).split(" "):
                 yield word + " "
                 await asyncio.sleep(0.03)

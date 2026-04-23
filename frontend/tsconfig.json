@@ -36,16 +36,6 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "src/AIAnalysisCard.tsx",
-    "src/PropertyChat.tsx",
-    "src/PropertyGrid.tsx",
-    "src/SearchPanel.tsx",
-    "src/page.tsx",
-    "**/*.bkp",
-    "**/*.bkpbkp",
-    "**/*_[0-9]*",
-    "**/*.tsx_*",
-    "**/*.tsx.bkp"
+    "node_modules"
   ]
 }

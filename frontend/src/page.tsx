@@ -2,8 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { log, logger } from "@/lib/logger";
 import SearchPanel, { getCachedResult, setCachedResult } from "@/components/SearchPanel";
-import PropertyGrid, { ScoreStrip, RankFormulaNote } from "@/components/PropertyGrid";
-import AIAnalysisCard from "@/components/AIAnalysisCard";
+import PropertyGrid from "@/components/PropertyGrid";
 import ComparisonCharts from "@/components/ComparisonCharts";
 import PropertyChat from "@/components/PropertyChat";
 import type { SearchParams, SearchResult, Property } from "@/lib/types";
@@ -78,7 +77,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }:{
         <div style={{textAlign:"center",marginBottom:"26px"}}>
           <div style={{width:"62px",height:"62px",borderRadius:"17px",background:"linear-gradient(135deg,var(--pri),var(--pri-hi))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",margin:"0 auto 12px",boxShadow:"0 6px 20px rgba(124,58,237,0.4)"}}>🏘️</div>
           <div style={{fontSize:"30px",fontWeight:800,color:"var(--t1)"}}>Net<span style={{color:"var(--pri-hi)"}}>Flow</span></div>
-          <div style={{fontSize:"12px",color:"var(--t3)",fontWeight:500,marginTop:"2px"}}>AI-Powered Real Estate Intelligence</div>
+          <div style={{fontSize:"12px",color:"var(--t3)",fontWeight:500,marginTop:"2px"}}>Real Estate Investment Intelligence</div>
         </div>
 
         <div style={{fontSize:"16px",fontWeight:700,color:"var(--t1)",marginBottom:"3px"}}>Welcome back</div>
@@ -131,7 +130,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }:{
         )}
 
         <div style={{marginTop:"20px",paddingTop:"16px",borderTop:"1px solid var(--bd)",display:"flex",justifyContent:"space-around"}}>
-          {[{icon:"✨",l:"Smart Search"},{icon:"🏆",l:"AI Scores"},{icon:"🗺️",l:"Maps"},{icon:"💬",l:"AI Chat"}].map(f=>(
+          {[{icon:"✨",l:"Smart Search"},{icon:"🏆",l:"Scores"},{icon:"🗺️",l:"Maps"},{icon:"💬",l:"Chat"}].map(f=>(
             <div key={f.l} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
               <span style={{fontSize:"18px"}}>{f.icon}</span>
               <span style={{fontSize:"10px",color:"var(--t3)",fontWeight:500}}>{f.l}</span>
@@ -260,8 +259,6 @@ export default function Home() {
   const [result,      setResult]      = useState<SearchResult|null>(null);
   const [loading,     setLoading]     = useState(false);
   const [statusMsg,   setStatusMsg]   = useState("");
-  const [aiText,      setAiText]      = useState("");
-  const [streaming,   setStreaming]   = useState(false);
   const [chatProp,    setChatProp]    = useState<Property|null>(null);
   const [lastQuery,   setLastQuery]   = useState("");
   const [tab,         setTab]         = useState<"list"|"charts">("list");
@@ -272,7 +269,6 @@ export default function Home() {
   const [suggestedPrompt,setSuggestedPrompt]= useState("");
   const [showLog,     setShowLog]     = useState(false);
   const [showAgent,   setShowAgent]   = useState(false);
-  const aiRef = useRef("");
 
   // Apply theme to <html>
   useEffect(()=>{
@@ -294,7 +290,7 @@ export default function Home() {
   const handleLogout = useCallback(async()=>{
     if(currentUser) await recordLogin({username:currentUser.username,ts:Date.now(),success:false,reason:"User signed out"});
     log.auth("User signed out");
-    setCurrentUser(null); setResult(null); setAiText(""); setChatProp(null); setLastQuery("");
+    setCurrentUser(null); setResult(null); setChatProp(null); setLastQuery("");
   },[currentUser]);
 
   if(!currentUser) return <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme}/>;
@@ -307,13 +303,13 @@ export default function Home() {
     const cached = getCachedResult(params);
     if(cached){
       const r=cached as SearchResult;
-      setResult(r); setAiText(r.market_summary||""); setStreaming(false); setStatusMsg(""); setChatProp(null);
+      setResult(r); setStatusMsg(""); setChatProp(null);
       log.search("Cache hit",{query:queryLabel});
       return;
     }
 
-    setLoading(true); setResult(null); setAiText(""); setStreaming(false);
-    setChatProp(null); aiRef.current=""; setStatusMsg("Starting search...");
+    setLoading(true); setResult(null);
+    setChatProp(null); setStatusMsg("Starting search...");
     setSidebarOpen(false);
 
     try {
@@ -337,13 +333,12 @@ export default function Home() {
             else if(ev.type==="status")   { setStatusMsg(ev.msg); log.api("SSE status",{msg:ev.msg}); }
             else if(ev.type==="properties"){
               partial={...partial,properties:ev.data,mortgage_rate:ev.mortgage_rate,zip_code:ev.zip_code,location_display:ev.location_display};
-              setResult(partial as SearchResult); setLoading(false); setStreaming(true); setTab("list");
+              setResult(partial as SearchResult); setLoading(false); setTab("list");
               setCachedResult(params,partial as SearchResult);
               log.search("Properties received",{count:ev.data?.length||0,zip:ev.zip_code});
               if(currentUser) recordSearch({username:currentUser.username,prompt:queryLabel,params:params as unknown as Record<string,unknown>,resultCount:ev.data?.length||0,ts:Date.now()}).then(()=>getSearchHistory(currentUser.username).then(setSearchHist));
             }
-            else if(ev.type==="ai_token") { setAiText(p=>{const t=p+ev.token;aiRef.current=t;return t;}); }
-            else if(ev.type==="done")     { setStatusMsg(""); setStreaming(false); setResult(prev=>{if(prev){const u={...prev,market_summary:aiRef.current};setCachedResult(params,u);return u;}return prev;}); log.search("Search complete"); }
+            else if(ev.type==="done")     { setStatusMsg(""); log.search("Search complete"); }
             else if(ev.type==="error")    { setStatusMsg(`❌ ${ev.msg}`); setLoading(false); log.err("search",`SSE error: ${ev.msg}`); }
           }catch(_){}
         }
@@ -369,7 +364,7 @@ export default function Home() {
           <div style={{width:"32px",height:"32px",borderRadius:"9px",background:"linear-gradient(135deg,var(--pri),var(--pri-hi))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",boxShadow:"0 2px 10px rgba(37,99,235,.4)"}}>🏘️</div>
           <div>
             <div style={{fontSize:"18px",fontWeight:800,color:"var(--t1)",lineHeight:1}}>Net<span style={{color:"var(--pri-hi)"}}>Flow</span></div>
-            <div style={{fontSize:"10px",color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace"}} className="hide-mob">AI real estate intelligence</div>
+            <div style={{fontSize:"10px",color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace"}} className="hide-mob">Real estate investment</div>
           </div>
         </div>
 
@@ -378,15 +373,15 @@ export default function Home() {
           {result&&(
             <div style={{display:"flex",alignItems:"center",gap:"4px",padding:"3px 9px",borderRadius:"20px",background:"rgba(34,197,94,.12)",border:"1px solid rgba(16,185,129,.25)",fontSize:"11px",fontWeight:600,color:"var(--grn)"}}>
               <div style={{width:"5px",height:"5px",borderRadius:"50%",background:"var(--grn)"}}/>
-              <span className="hide-mob">{result.properties.length} props · {result.location_display||result.zip_code}</span>
-              <span className="show-mob">{result.properties.length} props</span>
+              <span className="hide-mob">Top {Math.min(result.properties.length,5)} · {result.location_display||result.zip_code}</span>
+              <span className="show-mob">Top {Math.min(result.properties.length,5)}</span>
             </div>
           )}
           <button onClick={()=>setShowLog(true)} title="View application log"
             style={{width:"34px",height:"34px",borderRadius:"8px",background:"var(--bg-raise)",border:"1px solid var(--bd)",color:"var(--t3)",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}} className="hide-mob">
             🪵
           </button>
-          <button onClick={()=>setShowAgent(true)} title="Agent pipeline & observability"
+          <button onClick={()=>setShowAgent(true)} title="Pipeline & observability"
             style={{width:"34px",height:"34px",borderRadius:"8px",background:"var(--bg-raise)",border:"1px solid var(--bd)",color:"var(--t3)",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}} className="hide-mob">
             🤖
           </button>
@@ -450,22 +445,15 @@ export default function Home() {
             </div>
           )}
 
-          {/* Empty state */}
-          {!result&&!loading&&!clarifyMsg&&(
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"14px",padding:"60px 24px",textAlign:"center",border:"1px dashed var(--bd)",borderRadius:"16px",background:"var(--bg-surf)"}}>
-              <div style={{fontSize:"52px",opacity:.15}}>🏘️</div>
-              <div style={{fontSize:"18px",fontWeight:700,color:"var(--t3)"}}>Smart Property Search</div>
-              <div style={{fontSize:"13px",color:"var(--t4)",lineHeight:1.8,maxWidth:"360px"}}>
-                Type a <strong style={{color:"var(--pri-hi)"}}>ZIP</strong>, <strong style={{color:"var(--pri-hi)"}}>city/state</strong>, or <strong style={{color:"var(--pri-hi)"}}>full description</strong> in the left panel. On mobile, tap <strong style={{color:"var(--pri-hi)"}}>☰</strong> to open it.
-              </div>
-            </div>
-          )}
 
           {/* Loading */}
           {loading&&(
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"14px",padding:"60px 24px",background:"var(--bg-surf)",borderRadius:"16px",border:"1px solid var(--bd)"}}>
-              <div className="spinner"/>
-              <div style={{fontSize:"13px",color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace"}}>{statusMsg}</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"16px",padding:"80px 24px",background:"var(--bg-surf)",borderRadius:"16px",border:"1px solid var(--bd)",boxShadow:"var(--shd-sm)"}}>
+              <div className="spinner" style={{width:"44px",height:"44px",borderWidth:"4px"}}/>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:"14px",fontWeight:600,color:"var(--t2)",marginBottom:"4px"}}>Searching properties...</div>
+                <div style={{fontSize:"12px",color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace"}}>{statusMsg}</div>
+              </div>
             </div>
           )}
 
@@ -474,22 +462,19 @@ export default function Home() {
             <>
               {/* Query badge row */}
               <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                {lastQuery&&<div style={{padding:"3px 11px",borderRadius:"20px",background:"rgba(37,99,235,.10)",border:"1px solid var(--bd-hi)",fontSize:"12px",fontWeight:600,color:"var(--pri-hi)",display:"flex",alignItems:"center",gap:"4px"}}>✨ "{lastQuery}"</div>}
-                <div style={{fontSize:"11px",color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace"}}>{result.location_display||result.zip_code} · ${result.search_params?.budget?.toLocaleString()} · {new Date().toLocaleDateString()}</div>
+                {lastQuery&&<div style={{padding:"3px 11px",borderRadius:"20px",background:"rgba(37,99,235,.12)",border:"1px solid rgba(37,99,235,.35)",fontSize:"12px",fontWeight:600,color:"var(--pri-hi)",display:"flex",alignItems:"center",gap:"4px"}}>✨ "{lastQuery}"</div>}
+                <div style={{fontSize:"11px",color:"var(--t3)"}}>{result.location_display||result.zip_code} · {new Date().toLocaleDateString()}</div>
               </div>
-
-              {/* AI analysis card */}
-              <AIAnalysisCard text={aiText} mortgageRate={result.mortgage_rate} streaming={streaming}/>
 
               {/* Tab bar + title */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
                 <div>
-                  <div style={{fontSize:"16px",fontWeight:700,color:"var(--t1)"}}>🏆 Top 10 Investment Properties</div>
-                  <div style={{fontSize:"11px",color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace",marginTop:"1px"}}>Sorted by AI score · hover ℹ on metrics · tap card for AI analyst</div>
+                  <div style={{fontSize:"16px",fontWeight:700,color:"var(--t1)"}}>🏆 Top 5 Investment Properties</div>
+
                 </div>
                 <div style={{display:"flex",gap:"4px",background:"var(--bg-raise)",padding:"4px",borderRadius:"10px",border:"1px solid var(--bd)"}}>
                   {(["list","charts"] as const).map(t=>(
-                    <button key={t} onClick={()=>{setTab(t);log.nav("Tab changed",{tab:t});}} style={{padding:"6px 14px",borderRadius:"7px",fontSize:"12px",fontWeight:600,border:"none",cursor:"pointer",fontFamily:"inherit",background:tab===t?"rgba(124,58,237,.2)":"transparent",color:tab===t?"var(--pri-hi)":"var(--t3)"}}>
+                    <button key={t} onClick={()=>{setTab(t);log.nav("Tab changed",{tab:t});}} style={{padding:"6px 14px",borderRadius:"7px",fontSize:"12px",fontWeight:600,border:"none",cursor:"pointer",fontFamily:"inherit",background:tab===t?"rgba(37,99,235,.18)":"transparent",color:tab===t?"var(--pri-hi)":"var(--t3)"}}>
                       {t==="list"?"📋 Cards":"📊 Charts"}
                     </button>
                   ))}
@@ -499,46 +484,36 @@ export default function Home() {
               {/* Cards view */}
               {tab==="list"&&(
                 <>
-                  {/* ── Horizontal score chart strip (always visible on cards page) ── */}
-                  <ScoreStrip properties={result.properties}/>
-
                   {/* Cards + optional chat split */}
                   {!chatProp&&(
-                    <PropertyGrid properties={result.properties}
+                    <PropertyGrid properties={result.properties.slice(0,5)}
                       onSelectProperty={p=>setChatProp(p)}
                       selectedProperty={chatProp}/>
                   )}
                   {chatProp&&(
                     <div style={{display:"flex",gap:"14px",alignItems:"flex-start",flexWrap:"wrap"}}>
-                      <div style={{flex:"1 1 280px",minWidth:0}}>
-                        <PropertyGrid properties={result.properties}
+                      <div style={{flex:"2 1 320px",minWidth:0,minHeight:0}}>
+                        <PropertyGrid properties={result.properties.slice(0,5)}
                           onSelectProperty={p=>setChatProp(chatProp?.address===p.address?null:p)}
                           selectedProperty={chatProp}/>
                       </div>
-                      <div style={{flex:"1 1 320px",minWidth:"300px",height:"calc(100vh - 140px)",position:"sticky",top:"74px"}}>
+                      <div style={{flex:"1 1 340px",minWidth:"320px",height:"calc(100dvh - 80px)",position:"sticky",top:"68px",overflowY:"hidden",display:"flex",flexDirection:"column"}}>
                         <PropertyChat property={chatProp} mortgageRate={result.mortgage_rate||7.2} onClose={()=>{setChatProp(null);log.ui("Chat closed");}}/>
                       </div>
                     </div>
                   )}
 
-                  {/* Helper tip */}
-                  {!chatProp&&(
-                    <div style={{padding:"9px 14px",borderRadius:"9px",background:"rgba(124,58,237,.06)",border:"1px solid var(--bd)",fontSize:"12px",color:"var(--pri-hi)",display:"flex",alignItems:"center",gap:"7px"}}>
-                      💡 Tap <strong>🗺️</strong> for map · <strong>📋</strong> for MLS · any card for AI Analyst · hover metric <strong>ℹ</strong> for definitions
-                    </div>
-                  )}
+
                 </>
               )}
 
               {/* Charts view */}
-              {tab==="charts"&&<ComparisonCharts properties={result.properties} compact={false}/>}
+              {tab==="charts"&&<ComparisonCharts properties={result.properties.slice(0,5)} compact={false}/>}
             </>
           )}
         </main>
       </div>
 
-      {/* ── Floating rank formula note ──────────────────────── */}
-      {result&&<RankFormulaNote/>}
 
       {/* ── Log viewer modal ───────────────────────────────── */}
       {showLog&&<LogViewer onClose={()=>setShowLog(false)}/>}

@@ -22,11 +22,11 @@ function scoreInfo(s: number) {
 const NOTE_CLS  = ["note-v","note-g","note-a","note-c","note-p"];
 const NOTE_TOPS = ["var(--n1-tp)","var(--n2-tp)","var(--n3-tp)","var(--n4-tp)","var(--n5-tp)"];
 const NOTE_GRADS = [
-  "linear-gradient(135deg,#4f9eff,#1d4ed8)",
-  "linear-gradient(135deg,#10b981,#059669)",
-  "linear-gradient(135deg,#f59e0b,#d97706)",
-  "linear-gradient(135deg,#f43f5e,#c0273e)",
-  "linear-gradient(135deg,#a78bfa,#6d28d9)",
+  "linear-gradient(135deg,#4f9eff,#2563eb)",
+  "linear-gradient(135deg,#22c55e,#16a34a)",
+  "linear-gradient(135deg,#fb923c,#ea580c)",
+  "linear-gradient(135deg,#f43f5e,#e11d48)",
+  "linear-gradient(135deg,#a78bfa,#7c3aed)",
 ];
 
 const cfColor  = (v:number) => v>300?"var(--grn)":v>0?"var(--amb)":"var(--red)";
@@ -170,11 +170,11 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
       {/* Coloured top strip */}
       <div className={`sticky-top ${noteClass}`}/>
 
-      <div style={{padding:"16px 15px 12px"}}>
+      <div style={{padding:"13px 13px 10px"}}>
 
         {/* ── Row 1: Rank badge · Address · Price ── */}
         <div style={{display:"flex",alignItems:"flex-start",gap:"7px",marginBottom:"8px"}}>
-          <div style={{width:"28px",height:"28px",borderRadius:"50%",flexShrink:0,
+          <div style={{width:"26px",height:"26px",borderRadius:"50%",flexShrink:0,
             background:p.rank<=3?`linear-gradient(135deg,${topColor},${topColor}bb)`:"var(--bg-raise)",
             display:"flex",alignItems:"center",justifyContent:"center",
             fontSize:"10px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",
@@ -184,7 +184,7 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
             {p.rank}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:"13px",fontWeight:700,color:"var(--t1)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.address}</div>
+            <div style={{fontSize:"12px",fontWeight:700,color:"var(--t1)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.address}</div>
             <div style={{fontSize:"9px",color:"var(--t3)",marginTop:"1px",display:"flex",gap:"5px",flexWrap:"wrap",fontFamily:"'JetBrains Mono',monospace"}}>
               <span>📍 {p.zip_code}</span>
               <span>🛏️ {p.beds}bd/{p.baths}ba</span>
@@ -208,7 +208,7 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
                   {capIcon(p.cap_rate)} Cap
                   <span style={{fontSize:"8px",color:"var(--pri-hi)",lineHeight:1}}>ℹ</span>
                 </div>
-                <div style={{fontSize:"15px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:crC}}>{p.cap_rate}%</div>
+                <div style={{fontSize:"14px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:crC}}>{p.cap_rate}%</div>
               </div>
             </Tip>
 
@@ -219,7 +219,7 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
                   {cfIcon(p.cash_flow)} CF
                   <span style={{fontSize:"8px",color:"var(--pri-hi)",lineHeight:1}}>ℹ</span>
                 </div>
-                <div style={{fontSize:"15px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:cfC}}>${p.cash_flow}/mo</div>
+                <div style={{fontSize:"14px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:cfC}}>${p.cash_flow}/mo</div>
               </div>
             </Tip>
 
@@ -230,7 +230,7 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
                   📊 GRM
                   <span style={{fontSize:"8px",color:"var(--pri-hi)",lineHeight:1}}>ℹ</span>
                 </div>
-                <div style={{fontSize:"15px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"var(--pri-hi)"}}>{p.grm}×</div>
+                <div style={{fontSize:"14px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"var(--pri-hi)"}}>{p.grm}×</div>
               </div>
             </Tip>
           </div>
@@ -275,8 +275,91 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
 
         {/* Chat hint */}
         <div style={{marginTop:"6px",fontSize:"9px",fontWeight:600,color:selected?"var(--pri-hi)":"var(--t3)"}}>
-          💬 {selected?"Property Analyst open →":"Tap card to chat"}
+          💬 {selected?"AI Property Analyst open →":"Tap card to open AI Analyst"}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AI Score Ring Chart — all 10 properties as gauge rings ──────
+export function ScoreStrip({ properties }:{ properties:Property[] }) {
+  // Ring dimensions
+  const R = 34, STROKE = 6, SIZE = (R+STROKE)*2+4;
+  const CIRC = 2 * Math.PI * R;
+
+  return (
+    <div className="score-strip fade-in">
+
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"16px"}}>
+        <span style={{fontSize:"18px",lineHeight:1}}>🏆</span>
+        <div>
+          <div style={{fontSize:"13px",fontWeight:700,color:"var(--t2)"}}>AI Score — Top {properties.length}</div>
+          <div style={{fontSize:"11px",color:"var(--t3)",fontWeight:400}}>NetFlow investment score out of 100</div>
+        </div>
+      </div>
+
+      {/* Rings row — horizontally scrollable on small screens */}
+      <div style={{display:"flex",gap:"clamp(8px,2vw,20px)",overflowX:"auto",paddingBottom:"4px",alignItems:"flex-start",
+        /* hide scrollbar */ scrollbarWidth:"none"}}>
+        {properties.map((p, i) => {
+          const { icon, color } = scoreInfo(p.ai_score);
+          const ci   = (p.rank-1) % 5;
+          const ringC = NOTE_TOPS[ci];   // note colour for the ring stroke
+          const fill  = (p.ai_score / 100) * CIRC;
+          // short address label: first 2 words
+          const label = p.address.split(" ").slice(0,2).join(" ");
+          const rankLabel = `#${p.rank} ${label}`;
+
+          return (
+            <div key={p.address} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"7px",
+              flexShrink:0, minWidth:"68px", flex:"1 1 0"}}>
+
+              {/* SVG ring gauge */}
+              <div style={{position:"relative",width:`${SIZE}px`,height:`${SIZE}px`}}>
+                <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}
+                  style={{transform:"rotate(-90deg)"}}>
+                  {/* Track */}
+                  <circle
+                    cx={SIZE/2} cy={SIZE/2} r={R}
+                    fill="none"
+                    stroke="rgba(128,128,128,0.15)"
+                    strokeWidth={STROKE}
+                  />
+                  {/* Score arc */}
+                  <circle
+                    cx={SIZE/2} cy={SIZE/2} r={R}
+                    fill="none"
+                    stroke={ringC}
+                    strokeWidth={STROKE}
+                    strokeLinecap="round"
+                    strokeDasharray={`${fill.toFixed(2)} ${CIRC.toFixed(2)}`}
+                    style={{transition:`stroke-dasharray .9s ${i*0.07}s ease`}}
+                  />
+                </svg>
+                {/* Centre content: icon + score */}
+                <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",
+                  alignItems:"center",justifyContent:"center",gap:"1px"}}>
+                  <span style={{fontSize:"16px",lineHeight:1}}>{icon}</span>
+                  <span style={{fontSize:"14px",fontWeight:800,color,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>
+                    {p.ai_score}
+                  </span>
+                </div>
+              </div>
+
+              {/* Label below ring: "#1 8361 Mockingbird" split into 2 lines */}
+              <div style={{textAlign:"center",lineHeight:1.35}}>
+                <div style={{fontSize:"10px",fontWeight:700,color:"var(--t3)",fontFamily:"'JetBrains Mono',monospace"}}>
+                  #{p.rank} {p.address.split(" ")[0]}
+                </div>
+                <div style={{fontSize:"10px",fontWeight:500,color:"var(--t3)"}}>
+                  {p.address.split(" ").slice(1,3).join(" ")}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -298,14 +381,14 @@ export function RankFormulaNote() {
       {/* Header */}
       <button onClick={()=>{ setOpen(v=>!v); log.ui("Rank formula note toggled",{open:!open}); }}
         style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",background:`linear-gradient(135deg,var(--pri),var(--pri-hi))`,border:"none",cursor:"pointer",color:"#fff",fontFamily:"inherit"}}>
-        <span style={{fontSize:"12px",fontWeight:700}}>🧮 How is Score Calculated?</span>
+        <span style={{fontSize:"12px",fontWeight:700}}>🧮 How is Rank Calculated?</span>
         <span style={{fontSize:"13px",transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}>▲</span>
       </button>
 
       {open && (
         <div style={{padding:"13px 14px"}} onClick={e=>e.stopPropagation()}>
           <p style={{fontSize:"11px",color:"var(--t2)",marginBottom:"10px",lineHeight:1.65}}>
-            Each property receives a score 0–100 using a weighted rubric with local Ollama (llama3) when available. Ranked #1–10 by score. Falls back to rule-based scoring if Ollama is offline.
+            Each property receives an AI score 0–100 from <strong style={{color:"var(--pri-hi)"}}>local Ollama (llama3)</strong> using a weighted rubric. Ranked #1–10 by score. Falls back to rule-based scoring if Ollama is offline.
           </p>
           {dims.map(r=>(
             <div key={r.d} style={{marginBottom:"9px"}}>
@@ -321,7 +404,7 @@ export function RankFormulaNote() {
           ))}
           <div style={{marginTop:"10px",padding:"9px 11px",borderRadius:"8px",background:"var(--bg-raise)",border:"1px solid var(--bd)",fontSize:"10px",color:"var(--t3)",lineHeight:1.65}}>
             <strong style={{color:"var(--pri-hi)"}}>Formula:</strong> Score = Σ(dimension_score × weight)<br/>
-            Ollama llama3 when online · rule-based fallback when offline
+            Scored by <strong style={{color:"var(--pri-hi)"}}>Ollama llama3</strong> · rule-based fallback when offline
           </div>
         </div>
       )}

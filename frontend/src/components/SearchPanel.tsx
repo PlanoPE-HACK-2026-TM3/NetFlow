@@ -29,14 +29,6 @@ const STRATEGIES = [
   { label:"Flip",       value:"Flip",  icon:"🔨" },
 ] as const;
 
-const EXAMPLES = [
-  "75070",
-  "3 bed SFH in McKinney TX under $450k",
-  "Dallas TX homes under $500k LTR",
-  "BRRRR deal 75033 under $400k",
-  "condo in Houston under $300k STR",
-  "flip in Austin TX under $350k",
-];
 
 // ── In-memory search cache (session, 15min TTL) ───────────────
 const _cache = new Map<string, { result: unknown; ts: number }>();
@@ -88,10 +80,24 @@ const SH = ({ icon, label }: { icon:string; label:string }) => (
 const FL = ({ children }: { children:string }) => (
   <div style={{ fontSize:"13px", fontWeight:600, color:D.text2, marginBottom:"6px" }}>{children}</div>
 );
-const Div = () => <div style={{ height:"1px", background:"rgba(139,92,246,0.1)", margin:"6px 0" }} />;
+const Div = () => <div style={{ height:"1px", background:"rgba(79,158,255,0.10)", margin:"6px 0" }} />;
+
+const INP: React.CSSProperties = {
+  background:"var(--bg-raise)", border:`1px solid ${D.border}`,
+  borderRadius:"8px", padding:"10px 12px", color:D.text1, fontSize:"14px",
+  fontFamily:"Inter,sans-serif", outline:"none", width:"100%", transition:"all 0.18s",
+};
+const chip = (on:boolean): React.CSSProperties => ({
+  padding:"5px 10px", borderRadius:"7px", fontSize:"12px", fontWeight:600,
+  border:`1px solid ${on ? D.borderHi : D.border}`,
+  color: on ? D.primaryHi : D.text3,
+  background: on ? "rgba(79,158,255,0.12)" : "var(--bg-surf)",
+  cursor:"pointer", transition:"all 0.15s", userSelect:"none",
+  display:"flex", alignItems:"center", gap:"4px",
+});
 function Pill({ icon, val, color }: { icon:string; val:string; color:string }) {
   return (
-    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"var(--bg-raise)", border:"1px solid rgba(139,92,246,0.2)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
+    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"var(--bg-raise)", border:"1px solid rgba(79,158,255,0.20)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
       {icon} {val}
     </span>
   );
@@ -101,7 +107,6 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const [prompt,     setPrompt]     = useState("");
   const [parsed,     setParsed]     = useState<ParsedPrompt | null>(null);
   const [parsing,    setParsing]    = useState(false);
-  const [phIdx,      setPhIdx]      = useState(0);
 
   // Voice
   const [listening,  setListening]  = useState(false);
@@ -123,30 +128,31 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const parseTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const correctTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textaRef     = useRef<HTMLTextAreaElement>(null);
+  const parseAbort   = useRef<AbortController | null>(null);
 
   // Voice support detection
   useEffect(() => {
     setVoiceSupp(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
-  // Placeholder rotation
-  useEffect(() => {
-    const t = setInterval(() => setPhIdx(i => (i+1) % EXAMPLES.length), 3200);
-    return () => clearInterval(t);
-  }, []);
 
   // Auto-parse prompt (debounced)
   const doParse = useCallback(async (text: string) => {
     if (text.trim().length < 3) { setParsed(null); return; }
+    parseAbort.current?.abort();
+    const ctrl = new AbortController();
+    parseAbort.current = ctrl;
     setParsing(true);
     try {
-      const res  = await fetch(`${API_BASE}/api/parse-prompt`, {
+      const res = await fetch(`${API_BASE}/api/parse-prompt`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ prompt: text }),
+        signal: ctrl.signal,
       });
-      setParsed(await res.json());
-    } catch { setParsed(null); }
-    finally  { setParsing(false); }
+      if (!ctrl.signal.aborted) { setParsed(await res.json()); setParsing(false); }
+    } catch(e) {
+      if ((e as Error).name !== "AbortError") { setParsed(null); setParsing(false); }
+    }
   }, []);
 
   useEffect(() => {
@@ -184,7 +190,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setVoiceErr("Voice not supported in this browser."); return; }
     const r = new SR();
-    r.continuous = false; r.interimResults = false; r.lang = "en-US";
+    r.continuous = true; r.interimResults = false; r.lang = "en-US";
     r.onresult = (e: SpeechRecognitionEvent) => {
       const t = Array.from(e.results).map(x => x[0].transcript).join(" ").trim();
       if (t) { setPrompt(prev => prev ? `${prev} ${t}` : t); textaRef.current?.focus(); }
@@ -204,16 +210,9 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       }
       setListening(false);
     };
-    r.onend = () => setListening(false);
     recognRef.current = r;
     r.start(); setListening(true);
-
-    // Auto-stop after 8s — prevents long silence triggering "no-speech" error
-    const autoStop = setTimeout(() => {
-      if (recognRef.current) { recognRef.current.stop(); }
-    }, 8000);
-    // Clear auto-stop if recognition ends naturally first
-    r.onend = () => { clearTimeout(autoStop); setListening(false); };
+    r.onend = () => setListening(false);
   };
   const stopVoice = () => { recognRef.current?.stop(); setListening(false); };
 
@@ -230,27 +229,18 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
   const price     = finalBudget;
   const down      = price*0.2, loan=price-down, r=0.072/12, n=360;
-  const monthly   = Math.round(loan*(r*Math.pow(1+r,n))/(Math.pow(1+r,n)-1));
+  const pn        = Math.pow(1+r,n);
+  const monthly   = Math.round(loan*(r*pn)/(pn-1));
   const breakEven = Math.round(monthly*1.15);
-
-  const inp: React.CSSProperties = {
-    background:"var(--bg-raise)", border:`1px solid ${D.border}`,
-    borderRadius:"8px", padding:"10px 12px", color:D.text1, fontSize:"14px",
-    fontFamily:"Inter,sans-serif", outline:"none", width:"100%", transition:"all 0.18s",
-  };
-  const chip = (on:boolean): React.CSSProperties => ({
-    padding:"5px 10px", borderRadius:"7px", fontSize:"12px", fontWeight:600,
-    border:`1px solid ${on ? D.borderHi : D.border}`,
-    color: on ? D.primaryHi : D.text3,
-    background: on ? "rgba(139,92,246,0.12)" : "var(--bg-surf)",
-    cursor:"pointer", transition:"all 0.15s", userSelect:"none",
-    display:"flex", alignItems:"center", gap:"4px",
-  });
+  const inp       = INP;
 
   const overrideCount = [zipOver, budgetOver, typeOver, bedsOver !== null ? "x" : "", stratOver].filter(Boolean).length;
 
+  const hasOverride = overrideCount > 0;
+
   const handleSearch = () => {
-    if (!hasText) return;
+    // Allow search with EITHER prompt text OR active override filters
+    if (!hasText && !hasOverride) return;
     // Apply spell correction one last time before searching
     const correctedPrompt = silentCorrect(prompt.trim());
     if (correctedPrompt !== prompt) setPrompt(correctedPrompt);
@@ -271,7 +261,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       {/* ── SMART PROMPT ─────────────────────────────── */}
       <div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"8px" }}>
-          <SH icon="✨" label="Search Prompt" />
+          
           <div style={{ display:"flex", alignItems:"center", gap:"6px" }}/>
         </div>
 
@@ -283,7 +273,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
             onChange={e => handlePromptChange(e.target.value)}
             onBlur={handlePromptBlur}
             onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); handleSearch(); }}}
-            placeholder={`Try: "${EXAMPLES[phIdx]}" …\n(ZIP · city + state · or full description)`}
+            placeholder="ZIP, city + state, or describe what you're looking for..."
             rows={3}
             // ── Suppress ALL browser/extension spell-checkers ──────
             spellCheck={false}
@@ -297,10 +287,12 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
             style={{
               ...inp, resize:"none", lineHeight:1.6,
               paddingRight:"44px",
-              borderColor: isZip   ? "rgba(16,185,129,0.45)" :
-                           hasText ? "rgba(139,92,246,0.4)"  : D.border,
-              boxShadow:   isZip   ? "0 0 0 3px rgba(16,185,129,0.08)" :
-                           hasText ? "0 0 0 3px rgba(139,92,246,0.1)"  : "none",
+              borderColor: isZip       ? "rgba(16,185,129,0.50)" :
+                           hasText    ? "rgba(79,158,255,0.45)" :
+                           hasOverride? "rgba(245,158,11,0.45)" : D.border,
+              boxShadow:   isZip       ? "0 0 0 3px rgba(16,185,129,0.09)" :
+                           hasText    ? "0 0 0 3px rgba(79,158,255,0.11)" :
+                           hasOverride? "0 0 0 3px rgba(245,158,11,0.09)" : "none",
             }}
           />
 
@@ -312,7 +304,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               style={{
                 position:"absolute", top:"8px", right:"8px",
                 width:"28px", height:"28px", borderRadius:"50%",
-                background: listening ? "rgba(239,68,68,0.9)" : "rgba(139,92,246,0.15)",
+                background: listening ? "rgba(239,68,68,0.9)" : "rgba(79,158,255,0.14)",
                 border: `1px solid ${listening ? "rgba(239,68,68,0.6)" : D.border}`,
                 display:"flex", alignItems:"center", justifyContent:"center",
                 cursor:"pointer", transition:"all 0.2s",
@@ -347,30 +339,21 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
 
 
-        {/* Quick example chips */}
-        <div style={{ marginTop:"7px", display:"flex", flexWrap:"wrap", gap:"4px" }}>
-          {["75070","Dallas TX $500k","Austin STR $400k","McKinney BRRRR","Houston flip $300k"].map(ex=>(
-            <button key={ex} onClick={()=>setPrompt(ex)}
-              style={{ padding:"3px 8px", borderRadius:"5px", fontSize:"11px", border:`1px solid ${D.border}`, color:D.text3, background:"var(--bg-surf)", cursor:"pointer", transition:"all 0.15s" }}
-              onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=D.borderHi;(e.currentTarget as HTMLButtonElement).style.color=D.primaryHi;}}
-              onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=D.border;(e.currentTarget as HTMLButtonElement).style.color=D.text3;}}>
-              {ex}
-            </button>
-          ))}
-        </div>
+
       </div>
 
       <Div/>
 
-      {/* ── OVERRIDE FILTERS (collapsible) ────────── */}
+      {/* ── ADVANCED SEARCH (collapsible) ────────── */}
       <div>
         <button onClick={()=>setShowOver(v=>!v)}
-          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", background:"none", border:"none", cursor:"pointer", padding:0 }}>
-          <SH icon="⚙️" label="Override Filters" />
-          <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"8px" }}>
-            {overrideCount > 0 && <span style={{ fontSize:"10px", fontWeight:700, background:D.primaryHi, color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>{overrideCount}</span>}
-            <span style={{ fontSize:"12px", color:D.text3, display:"inline-block", transform:showOver?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▼</span>
+          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", cursor:"pointer", padding:"8px 12px", background:`linear-gradient(135deg,rgba(37,99,235,.13) 0%,rgba(99,102,241,.08) 100%)`, border:`1.5px solid ${D.primaryHi}44`, borderRadius:"10px", marginBottom:"4px", transition:"border-color .2s,box-shadow .2s", boxShadow:`0 0 0 ${showOver?"3px":"0px"} ${D.primaryHi}22` }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
+            <span style={{ fontSize:"16px", lineHeight:1 }}>🔍</span>
+            <span style={{ fontSize:"14px", fontWeight:800, color:D.primaryHi, letterSpacing:".3px" }}>Advanced Search</span>
+            {overrideCount > 0 && <span style={{ fontSize:"11px", fontWeight:700, background:D.primaryHi, color:"#fff", borderRadius:"10px", padding:"1px 7px" }}>{overrideCount}</span>}
           </div>
+          <span style={{ fontSize:"13px", color:D.primaryHi, display:"inline-block", transform:showOver?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▼</span>
         </button>
 
         {showOver && (
@@ -379,14 +362,14 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               <FL>ZIP Code</FL>
               <input style={inp} value={zipOver} onChange={e=>setZipOver(e.target.value.replace(/\D/g,"").slice(0,5))}
                 placeholder="e.g. 75070  (blank = from prompt)"
-                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(124,58,237,0.06)";}}
+                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
                 onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
             </div>
             <div>
               <FL>Max Budget</FL>
               <input style={inp} value={budgetOver} onChange={e=>setBudgetOver(e.target.value)}
                 placeholder="e.g. 450000  (blank = from prompt)"
-                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(139,92,246,0.1)";e.target.style.background="rgba(124,58,237,0.06)";}}
+                onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
                 onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
             </div>
             <div>
@@ -427,32 +410,19 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       </div>
 
       {/* ── SEARCH BUTTON ─────────────────────────── */}
-      <button onClick={handleSearch} disabled={loading||!hasText}
+      <button onClick={handleSearch} disabled={loading||(!hasText&&!hasOverride)}
         style={{ width:"100%", padding:"13px", borderRadius:"10px",
-          background: loading||!hasText?"rgba(139,92,246,0.3)":"linear-gradient(135deg,#7c3aed,#6d28d9)",
-          border:"1px solid rgba(139,92,246,0.4)", color:"#fff", fontSize:"15px", fontWeight:700,
-          cursor:loading||!hasText?"not-allowed":"pointer", fontFamily:"inherit",
+          background: (loading||(!hasText&&!hasOverride))?"rgba(79,158,255,0.28)":"linear-gradient(135deg,#2563eb,#1e40af)",
+          border:"1px solid rgba(79,158,255,0.40)", color:"#fff", fontSize:"15px", fontWeight:700,
+          cursor:(loading||(!hasText&&!hasOverride))?"not-allowed":"pointer", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center", gap:"8px",
-          boxShadow:loading||!hasText?"none":"0 4px 20px rgba(124,58,237,0.4)", transition:"all 0.2s" }}>
+          boxShadow:(loading||(!hasText&&!hasOverride))?"none":"0 4px 20px rgba(37,99,235,0.38)", transition:"all 0.2s" }}>
         {loading
           ? <><div style={{ width:"15px",height:"15px",border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.75s linear infinite" }}/>{statusMsg||"Analyzing..."}</>
-          : <>🔍 Find Top 10 Properties</>}
+          : <>{hasOverride&&!hasText?`🔍 Search (${overrideCount} filter${overrideCount>1?'s':''})`:"🔍 Search Properties"}</>}
       </button>
 
-      {/* ── EFFECTIVE PARAMS PREVIEW ─────────────── */}
-      {hasText && (
-        <div style={{ padding:"8px 10px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}` }}>
-          <div style={{ fontSize:"10px", fontWeight:700, color:D.text3, marginBottom:"5px", textTransform:"uppercase", letterSpacing:"0.6px" }}>Will search with:</div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
-            <Pill icon="📮" val={finalZip}              color={zipOver    ? D.amber : D.green}/>
-            <Pill icon="💰" val={`$${finalBudget.toLocaleString()}`} color={budgetOver  ? D.amber : D.text2}/>
-            <Pill icon="🛏️" val={`${finalBeds}+ bd`}   color={bedsOver!==null ? D.amber : D.text2}/>
-            <Pill icon="🏠" val={finalType}             color={typeOver   ? D.amber : D.text2}/>
-            <Pill icon="📅" val={finalStrat}            color={stratOver  ? D.amber : D.text2}/>
-          </div>
-          <div style={{ fontSize:"10px", color:D.text3, marginTop:"4px" }}>🟡 amber = override &nbsp;|&nbsp; 🟢 green = from prompt</div>
-        </div>
-      )}
+
 
       <Div/>
 
@@ -463,7 +433,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
           <SH icon="🕑" label="Search History" />
           <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"8px" }}>
             {searchHistory.length > 0 && (
-              <span style={{ fontSize:"10px", fontWeight:700, background:"rgba(139,92,246,0.3)", color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>
+              <span style={{ fontSize:"10px", fontWeight:700, background:"rgba(79,158,255,0.28)", color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>
                 {searchHistory.length}
               </span>
             )}
@@ -481,7 +451,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
                   <div key={h.id ?? i}
                     onClick={() => { setPrompt(h.prompt); onHistorySelect(h.prompt); setShowHist(false); }}
                     style={{ padding:"9px 11px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}`, cursor:"pointer", transition:"all 0.15s" }}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(139,92,246,0.08)";(e.currentTarget as HTMLDivElement).style.borderColor=D.borderHi;}}
+                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(79,158,255,0.08)";(e.currentTarget as HTMLDivElement).style.borderColor=D.borderHi;}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background="var(--bg-surf)";(e.currentTarget as HTMLDivElement).style.borderColor=D.border;}}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px" }}>
                       <div style={{ fontSize:"12px", fontWeight:600, color:D.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
@@ -507,28 +477,12 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
       <Div/>
 
-      {/* ── MARKET SNAPSHOT ──────────────────────── */}
-      <div>
-        <SH icon="📊" label="Market Snapshot"/>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"7px" }}>
-          {[{icon:"🏦",val:"7.2%",lbl:"30yr Rate",c:D.red},{icon:"📈",val:"5.8%",lbl:"Avg Cap",c:D.green},{icon:"💰",val:"$2,140",lbl:"Median Rent",c:D.primaryHi},{icon:"📅",val:"28d",lbl:"Avg DOM",c:D.amber}].map(s=>(
-            <div key={s.lbl} style={{ padding:"11px",borderRadius:"9px",background:"var(--bg-surf)",border:`1px solid ${D.border}` }}>
-              <div style={{ fontSize:"15px",marginBottom:"2px" }}>{s.icon}</div>
-              <div style={{ fontSize:"16px",fontWeight:800,color:s.c,fontFamily:"'JetBrains Mono',monospace" }}>{s.val}</div>
-              <div style={{ fontSize:"10px",color:D.text3,fontWeight:500 }}>{s.lbl}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <Div/>
-
       {/* ── MORTGAGE CALCULATOR ──────────────────── */}
       <div>
         <SH icon="🧮" label="Mortgage Calculator"/>
         <div style={{ background:"var(--bg-surf)",border:`1px solid ${D.border}`,borderRadius:"9px",padding:"12px" }}>
           {[["🏷️","Price",`$${price.toLocaleString()}`,false],["⬇️","Down 20%",`$${Math.round(down).toLocaleString()}`,false],["🏦","Loan",`$${Math.round(loan).toLocaleString()}`,false],["💳","Monthly P&I",`$${monthly.toLocaleString()}`,true],["⚖️","Break-even",`$${breakEven.toLocaleString()}`,true]].map(([ic,l,v,b],i)=>(
-            <div key={l as string} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<4?"1px solid rgba(139,92,246,0.07)":"none" }}>
+            <div key={l as string} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:i<4?"1px solid rgba(79,158,255,0.07)":"none" }}>
               <span style={{ fontSize:"12px",color:D.text3,display:"flex",alignItems:"center",gap:"4px" }}><span>{ic}</span>{l}</span>
               <span style={{ fontSize:"12px",fontFamily:"'JetBrains Mono',monospace",fontWeight:b?700:500,color:b?D.primaryHi:D.text2 }}>{v}</span>
             </div>

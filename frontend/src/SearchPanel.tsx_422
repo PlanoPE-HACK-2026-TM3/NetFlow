@@ -29,6 +29,14 @@ const STRATEGIES = [
   { label:"Flip",       value:"Flip",  icon:"🔨" },
 ] as const;
 
+const EXAMPLES = [
+  "75070",
+  "3 bed SFH in McKinney TX under $450k",
+  "Dallas TX homes under $500k LTR",
+  "BRRRR deal 75033 under $400k",
+  "condo in Houston under $300k STR",
+  "flip in Austin TX under $350k",
+];
 
 // ── In-memory search cache (session, 15min TTL) ───────────────
 const _cache = new Map<string, { result: unknown; ts: number }>();
@@ -93,6 +101,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const [prompt,     setPrompt]     = useState("");
   const [parsed,     setParsed]     = useState<ParsedPrompt | null>(null);
   const [parsing,    setParsing]    = useState(false);
+  const [phIdx,      setPhIdx]      = useState(0);
 
   // Voice
   const [listening,  setListening]  = useState(false);
@@ -120,6 +129,11 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     setVoiceSupp(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
+  // Placeholder rotation
+  useEffect(() => {
+    const t = setInterval(() => setPhIdx(i => (i+1) % EXAMPLES.length), 3200);
+    return () => clearInterval(t);
+  }, []);
 
   // Auto-parse prompt (debounced)
   const doParse = useCallback(async (text: string) => {
@@ -170,7 +184,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setVoiceErr("Voice not supported in this browser."); return; }
     const r = new SR();
-    r.continuous = true; r.interimResults = false; r.lang = "en-US";
+    r.continuous = false; r.interimResults = false; r.lang = "en-US";
     r.onresult = (e: SpeechRecognitionEvent) => {
       const t = Array.from(e.results).map(x => x[0].transcript).join(" ").trim();
       if (t) { setPrompt(prev => prev ? `${prev} ${t}` : t); textaRef.current?.focus(); }
@@ -190,9 +204,16 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       }
       setListening(false);
     };
+    r.onend = () => setListening(false);
     recognRef.current = r;
     r.start(); setListening(true);
-    r.onend = () => setListening(false);
+
+    // Auto-stop after 8s — prevents long silence triggering "no-speech" error
+    const autoStop = setTimeout(() => {
+      if (recognRef.current) { recognRef.current.stop(); }
+    }, 8000);
+    // Clear auto-stop if recognition ends naturally first
+    r.onend = () => { clearTimeout(autoStop); setListening(false); };
   };
   const stopVoice = () => { recognRef.current?.stop(); setListening(false); };
 
@@ -250,7 +271,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       {/* ── SMART PROMPT ─────────────────────────────── */}
       <div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"8px" }}>
-          
+          <SH icon="✨" label="Search Prompt" />
           <div style={{ display:"flex", alignItems:"center", gap:"6px" }}/>
         </div>
 
@@ -262,7 +283,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
             onChange={e => handlePromptChange(e.target.value)}
             onBlur={handlePromptBlur}
             onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); handleSearch(); }}}
-            placeholder="ZIP, city + state, or describe what you're looking for..."
+            placeholder={`Try: "${EXAMPLES[phIdx]}" …\n(ZIP · city + state · or full description)`}
             rows={3}
             // ── Suppress ALL browser/extension spell-checkers ──────
             spellCheck={false}
@@ -326,21 +347,30 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
 
 
-
+        {/* Quick example chips */}
+        <div style={{ marginTop:"7px", display:"flex", flexWrap:"wrap", gap:"4px" }}>
+          {["75070","Dallas TX $500k","Austin STR $400k","McKinney BRRRR","Houston flip $300k"].map(ex=>(
+            <button key={ex} onClick={()=>setPrompt(ex)}
+              style={{ padding:"3px 8px", borderRadius:"5px", fontSize:"11px", border:`1px solid ${D.border}`, color:D.text3, background:"var(--bg-surf)", cursor:"pointer", transition:"all 0.15s" }}
+              onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=D.borderHi;(e.currentTarget as HTMLButtonElement).style.color=D.primaryHi;}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=D.border;(e.currentTarget as HTMLButtonElement).style.color=D.text3;}}>
+              {ex}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Div/>
 
-      {/* ── ADVANCED SEARCH (collapsible) ────────── */}
+      {/* ── OVERRIDE FILTERS (collapsible) ────────── */}
       <div>
         <button onClick={()=>setShowOver(v=>!v)}
-          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", cursor:"pointer", padding:"8px 12px", background:`linear-gradient(135deg,rgba(37,99,235,.13) 0%,rgba(99,102,241,.08) 100%)`, border:`1.5px solid ${D.primaryHi}44`, borderRadius:"10px", marginBottom:"4px", transition:"border-color .2s,box-shadow .2s", boxShadow:`0 0 0 ${showOver?"3px":"0px"} ${D.primaryHi}22` }}>
-          <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
-            <span style={{ fontSize:"16px", lineHeight:1 }}>🔍</span>
-            <span style={{ fontSize:"14px", fontWeight:800, color:D.primaryHi, letterSpacing:".3px" }}>Advanced Search</span>
-            {overrideCount > 0 && <span style={{ fontSize:"11px", fontWeight:700, background:D.primaryHi, color:"#fff", borderRadius:"10px", padding:"1px 7px" }}>{overrideCount}</span>}
+          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", background:"none", border:"none", cursor:"pointer", padding:0 }}>
+          <SH icon="⚙️" label="Override Filters" />
+          <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"8px" }}>
+            {overrideCount > 0 && <span style={{ fontSize:"10px", fontWeight:700, background:D.primaryHi, color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>{overrideCount}</span>}
+            <span style={{ fontSize:"12px", color:D.text3, display:"inline-block", transform:showOver?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▼</span>
           </div>
-          <span style={{ fontSize:"13px", color:D.primaryHi, display:"inline-block", transform:showOver?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▼</span>
         </button>
 
         {showOver && (
@@ -406,10 +436,23 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
           boxShadow:loading||!hasText?"none":"0 4px 20px rgba(37,99,235,0.38)", transition:"all 0.2s" }}>
         {loading
           ? <><div style={{ width:"15px",height:"15px",border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.75s linear infinite" }}/>{statusMsg||"Analyzing..."}</>
-          : <>🔍 Search Properties</>}
+          : <>🔍 Find Top 10 Properties</>}
       </button>
 
-
+      {/* ── EFFECTIVE PARAMS PREVIEW ─────────────── */}
+      {hasText && (
+        <div style={{ padding:"8px 10px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}` }}>
+          <div style={{ fontSize:"10px", fontWeight:700, color:D.text3, marginBottom:"5px", textTransform:"uppercase", letterSpacing:"0.6px" }}>Will search with:</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:"5px" }}>
+            <Pill icon="📮" val={finalZip}              color={zipOver    ? D.amber : D.green}/>
+            <Pill icon="💰" val={`$${finalBudget.toLocaleString()}`} color={budgetOver  ? D.amber : D.text2}/>
+            <Pill icon="🛏️" val={`${finalBeds}+ bd`}   color={bedsOver!==null ? D.amber : D.text2}/>
+            <Pill icon="🏠" val={finalType}             color={typeOver   ? D.amber : D.text2}/>
+            <Pill icon="📅" val={finalStrat}            color={stratOver  ? D.amber : D.text2}/>
+          </div>
+          <div style={{ fontSize:"10px", color:D.text3, marginTop:"4px" }}>🟡 amber = override &nbsp;|&nbsp; 🟢 green = from prompt</div>
+        </div>
+      )}
 
       <Div/>
 
@@ -460,6 +503,22 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
             )}
           </div>
         )}
+      </div>
+
+      <Div/>
+
+      {/* ── MARKET SNAPSHOT ──────────────────────── */}
+      <div>
+        <SH icon="📊" label="Market Snapshot"/>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"7px" }}>
+          {[{icon:"🏦",val:"7.2%",lbl:"30yr Rate",c:D.red},{icon:"📈",val:"5.8%",lbl:"Avg Cap",c:D.green},{icon:"💰",val:"$2,140",lbl:"Median Rent",c:D.primaryHi},{icon:"📅",val:"28d",lbl:"Avg DOM",c:D.amber}].map(s=>(
+            <div key={s.lbl} style={{ padding:"11px",borderRadius:"9px",background:"var(--bg-surf)",border:`1px solid ${D.border}` }}>
+              <div style={{ fontSize:"15px",marginBottom:"2px" }}>{s.icon}</div>
+              <div style={{ fontSize:"16px",fontWeight:800,color:s.c,fontFamily:"'JetBrains Mono',monospace" }}>{s.val}</div>
+              <div style={{ fontSize:"10px",color:D.text3,fontWeight:500 }}>{s.lbl}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Div/>

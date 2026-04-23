@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { log, logger } from "@/lib/logger";
 import SearchPanel, { getCachedResult, setCachedResult } from "@/components/SearchPanel";
 import PropertyGrid from "@/components/PropertyGrid";
@@ -10,7 +10,6 @@ import AgentPanel from "@/components/AgentPanel";
 import {
   seedDefaultUser, validateLogin, recordLogin, recordSearch,
   getLoginHistory, getSearchHistory, clearSearchHistory,
-  getFavorites, addFavorite, removeFavorite,
   type LoginRecord, type SearchRecord, type DBUser,
 } from "@/lib/db";
 
@@ -262,9 +261,7 @@ export default function Home() {
   const [statusMsg,   setStatusMsg]   = useState("");
   const [chatProp,    setChatProp]    = useState<Property|null>(null);
   const [lastQuery,   setLastQuery]   = useState("");
-  const [tab,         setTab]         = useState<"list"|"charts"|"favorites">("list");
-  const [favAddresses,setFavAddresses]= useState<Set<string>>(new Set());
-  const [favList,     setFavList]     = useState<Property[]>([]);
+  const [tab,         setTab]         = useState<"list"|"charts">("list");
   const [loginHist,   setLoginHist]   = useState<LoginRecord[]>([]);
   const [searchHist,  setSearchHist]  = useState<SearchRecord[]>([]);
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
@@ -282,10 +279,8 @@ export default function Home() {
   const toggleTheme = useCallback(()=>setTheme(t=>t==="dark"?"light":"dark"),[]);
 
   const loadHistories = useCallback(async(username:string)=>{
-    const [lh,sh,favs] = await Promise.all([getLoginHistory(username),getSearchHistory(username),getFavorites(username)]);
+    const [lh,sh] = await Promise.all([getLoginHistory(username),getSearchHistory(username)]);
     setLoginHist(lh); setSearchHist(sh);
-    setFavAddresses(new Set(favs.map(f=>f.address)));
-    setFavList(favs.map(f=>f.property as unknown as Property));
   },[]);
 
   const handleLogin = useCallback(async(user:DBUser)=>{
@@ -296,32 +291,11 @@ export default function Home() {
     if(currentUser) await recordLogin({username:currentUser.username,ts:Date.now(),success:false,reason:"User signed out"});
     log.auth("User signed out");
     setCurrentUser(null); setResult(null); setChatProp(null); setLastQuery("");
-    setFavAddresses(new Set()); setFavList([]);
   },[currentUser]);
 
-  const toggleFavorite = useCallback((p:Property)=>{
-    if(!currentUser) return;
-    setFavAddresses(prev=>{
-      const next=new Set(prev);
-      if(next.has(p.address)){
-        next.delete(p.address);
-        removeFavorite(currentUser.username,p.address);
-      } else {
-        next.add(p.address);
-        addFavorite({username:currentUser.username,address:p.address,property:p as unknown as Record<string,unknown>,ts:Date.now()});
-      }
-      return next;
-    });
-    setFavList(prev=>prev.some(f=>f.address===p.address)
-      ? prev.filter(f=>f.address!==p.address)
-      : [p,...prev]
-    );
-  },[currentUser]);
+  if(!currentUser) return <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme}/>;
 
-  const handleSelectProp       = useCallback((p:Property)=>setChatProp(p),[]);
-  const handleSelectPropToggle = useCallback((p:Property)=>setChatProp(prev=>prev?.address===p.address?null:p),[]);
-
-  const handleSearch = useCallback(async(params:SearchParams & {prompt_text?:string})=>{
+  const handleSearch = async(params:SearchParams & {prompt_text?:string})=>{
     const queryLabel = params.prompt_text||params.zip_code||"";
     setLastQuery(queryLabel);
     log.search("Search initiated",{query:queryLabel,params});
@@ -334,25 +308,26 @@ export default function Home() {
       return;
     }
 
-    setLoading(true); setResult(null); setChatProp(null);
-    setStatusMsg("Starting search..."); setClarifyMsg(""); setSuggestedPrompt("");
+    setLoading(true); setResult(null);
+    setChatProp(null); setStatusMsg("Starting search...");
     setSidebarOpen(false);
 
     try {
       const res = await fetch(`${API_BASE}/api/search/stream`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(params)});
       if(!res.ok) throw new Error(`Backend ${res.status}`);
       if(!res.body) return;
-      const reader=res.body.getReader(); const dec=new TextDecoder("utf-8",{fatal:false}); let partial:Partial<SearchResult>={};
+      const reader=res.body.getReader(); const dec=new TextDecoder(); let partial:Partial<SearchResult>={};
 
       while(true){
         const {done,value}=await reader.read(); if(done) break;
-        const lines=dec.decode(value,{stream:true}).split("\n").filter(l=>l.startsWith("data: "));
+        const lines=dec.decode(value).split("\n").filter(l=>l.startsWith("data: "));
         for(const line of lines){
           try{
             const ev=JSON.parse(line.slice(6));
-            if(ev.type==="clarify"){
+            if(ev.type==="clarify")       {
               setStatusMsg(""); setLoading(false);
-              setClarifyMsg(ev.msg||""); setSuggestedPrompt(ev.suggested_prompt||"");
+              setClarifyMsg(ev.msg||"");
+              setSuggestedPrompt(ev.suggested_prompt||"");
               log.warn("search","Clarification needed",{msg:ev.msg});
             }
             else if(ev.type==="status")   { setStatusMsg(ev.msg); log.api("SSE status",{msg:ev.msg}); }
@@ -363,8 +338,8 @@ export default function Home() {
               log.search("Properties received",{count:ev.data?.length||0,zip:ev.zip_code});
               if(currentUser) recordSearch({username:currentUser.username,prompt:queryLabel,params:params as unknown as Record<string,unknown>,resultCount:ev.data?.length||0,ts:Date.now()}).then(()=>getSearchHistory(currentUser.username).then(setSearchHist));
             }
-            else if(ev.type==="done")  { setStatusMsg(""); log.search("Search complete"); }
-            else if(ev.type==="error") { setStatusMsg(`❌ ${ev.msg}`); setLoading(false); log.err("search",`SSE error: ${ev.msg}`); }
+            else if(ev.type==="done")     { setStatusMsg(""); log.search("Search complete"); }
+            else if(ev.type==="error")    { setStatusMsg(`❌ ${ev.msg}`); setLoading(false); log.err("search",`SSE error: ${ev.msg}`); }
           }catch(_){}
         }
       }
@@ -373,15 +348,7 @@ export default function Home() {
       setStatusMsg(`Error: ${msg}`); setLoading(false);
       log.err("search",`Search failed: ${msg}`);
     }
-  },[currentUser]);
-
-  const handleHistorySelect = useCallback((prompt:string)=>
-    handleSearch({zip_code:"75070",budget:450000,property_type:"SFH",min_beds:3,strategy:"LTR",prompt_text:prompt})
-  ,[handleSearch]);
-
-  const displayProps = useMemo(()=>result?.properties.slice(0,5)??[],[result]);
-
-  if(!currentUser) return <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme}/>;
+  };
 
   return (
     <div className="app-shell" style={{minHeight:"100vh"}}>
@@ -389,7 +356,7 @@ export default function Home() {
       {/* ── HEADER ─────────────────────────────────────────────── */}
       <header className="app-header">
         {/* Left: hamburger (mobile) + logo */}
-        <div style={{display:"flex",alignItems:"center",gap:"10px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
           <button className="mob-btn" onClick={()=>setSidebarOpen(v=>!v)} aria-label="Open menu"
             style={{width:"34px",height:"34px",borderRadius:"8px",background:"var(--bg-raise)",border:"1px solid var(--bd)",color:"var(--t2)",cursor:"pointer",fontSize:"17px",display:"none",alignItems:"center",justifyContent:"center"}}>
             ☰
@@ -401,15 +368,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Centre: scrolling market ticker */}
-        <div className="hide-mob" style={{flex:1,overflow:"hidden",margin:"0 18px",height:"22px",display:"flex",alignItems:"center"}}>
-          <span style={{display:"inline-block",whiteSpace:"nowrap",animation:"mq-ticker 35s linear infinite",fontSize:"11px",fontWeight:700,color:"var(--pri-hi)",letterSpacing:".9px"}}>
-            📊&nbsp;MARKET SNAPSHOT&nbsp;·&nbsp;🏦&nbsp;30yr Fixed:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>7.2%</span>&nbsp;·&nbsp;📈&nbsp;Avg Cap Rate:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>5.8%</span>&nbsp;·&nbsp;💰&nbsp;Median Rent:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>$2,140/mo</span>&nbsp;·&nbsp;📅&nbsp;Avg DOM:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>28d</span>&nbsp;·&nbsp;🏠&nbsp;Median List:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>$389K</span>&nbsp;·&nbsp;📉&nbsp;Vacancy:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>5.1%</span>&nbsp;·&nbsp;💵&nbsp;P/R Ratio:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>15.2x</span>&nbsp;·&nbsp;🔑&nbsp;Cash-on-Cash:&nbsp;<span style={{color:"#ef4444",fontWeight:800}}>6.4%</span>&nbsp;&nbsp;&nbsp;
-          </span>
-        </div>
-
         {/* Right controls */}
-        <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
           {result&&(
             <div style={{display:"flex",alignItems:"center",gap:"4px",padding:"3px 9px",borderRadius:"20px",background:"rgba(34,197,94,.12)",border:"1px solid rgba(16,185,129,.25)",fontSize:"11px",fontWeight:600,color:"var(--grn)"}}>
               <div style={{width:"5px",height:"5px",borderRadius:"50%",background:"var(--grn)"}}/>
@@ -445,7 +405,7 @@ export default function Home() {
             <button onClick={()=>setSidebarOpen(false)} style={{background:"none",border:"none",color:"var(--t3)",cursor:"pointer",fontSize:"20px"}}>✕</button>
           </div>
           <SearchPanel onSearch={handleSearch} loading={loading} statusMsg={statusMsg} searchHistory={searchHist}
-            onHistorySelect={handleHistorySelect}/>
+            onHistorySelect={prompt=>handleSearch({zip_code:"75070",budget:450000,property_type:"SFH",min_beds:3,strategy:"LTR",prompt_text:prompt})}/>
         </aside>
 
         {/* ── MAIN CONTENT ───────────────────────────────────── */}
@@ -500,10 +460,21 @@ export default function Home() {
           {/* Results */}
           {result&&(
             <>
-              {/* Query badge row */}
-              <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                {lastQuery&&<div style={{padding:"3px 11px",borderRadius:"20px",background:"rgba(37,99,235,.12)",border:"1px solid rgba(37,99,235,.35)",fontSize:"12px",fontWeight:600,color:"var(--pri-hi)",display:"flex",alignItems:"center",gap:"4px"}}>✨ "{lastQuery}"</div>}
-                <div style={{fontSize:"11px",color:"var(--t3)"}}>{result.location_display||result.zip_code} · {new Date().toLocaleDateString()}</div>
+              {/* Results header */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
+                <div>
+                  <div style={{fontSize:"22px",fontWeight:800,color:"var(--t1)",letterSpacing:"-0.5px"}}>
+                    {result.properties.slice(0,5).length} propert{result.properties.slice(0,5).length===1?"y":"ies"} found
+                  </div>
+                  <div style={{fontSize:"13px",color:"var(--t3)",marginTop:"2px"}}>
+                    {result.location_display||result.zip_code}{lastQuery?` · "${lastQuery}"`:""}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                  <span style={{fontSize:"12px",color:"var(--t3)"}}>Sort by score</span>
+                  <div style={{width:1,height:16,background:"var(--bd)"}}/>
+                  <span style={{fontSize:"12px",fontWeight:600,color:"var(--pri-hi)",fontFamily:"'JetBrains Mono',monospace"}}>{result.mortgage_rate}% rate</span>
+                </div>
               </div>
 
               {/* Tab bar + title */}
@@ -513,9 +484,9 @@ export default function Home() {
 
                 </div>
                 <div style={{display:"flex",gap:"4px",background:"var(--bg-raise)",padding:"4px",borderRadius:"10px",border:"1px solid var(--bd)"}}>
-                  {(["list","charts","favorites"] as const).map(t=>(
+                  {(["list","charts"] as const).map(t=>(
                     <button key={t} onClick={()=>{setTab(t);log.nav("Tab changed",{tab:t});}} style={{padding:"6px 14px",borderRadius:"7px",fontSize:"12px",fontWeight:600,border:"none",cursor:"pointer",fontFamily:"inherit",background:tab===t?"rgba(37,99,235,.18)":"transparent",color:tab===t?"var(--pri-hi)":"var(--t3)"}}>
-                      {t==="list"?"📋 Cards":t==="charts"?"📊 Charts":`❤️ Saved${favList.length>0?` (${favList.length})`:""}`}
+                      {t==="list"?"Listings":"Charts"}
                     </button>
                   ))}
                 </div>
@@ -526,22 +497,26 @@ export default function Home() {
                 <>
                   {/* Cards + optional chat split */}
                   {!chatProp&&(
-                    <PropertyGrid properties={displayProps}
-                      onSelectProperty={handleSelectProp}
-                      selectedProperty={chatProp}
-                      favorites={favAddresses}
-                      onToggleFavorite={toggleFavorite}/>
+                    <PropertyGrid properties={result.properties.slice(0,5)}
+                      onSelectProperty={p=>setChatProp(p)}
+                      selectedProperty={chatProp}/>
                   )}
                   {chatProp&&(
-                    <div style={{display:"flex",gap:"14px",alignItems:"flex-start",flexWrap:"wrap"}}>
-                      <div style={{flex:"2 1 320px",minWidth:0,minHeight:0}}>
-                        <PropertyGrid properties={displayProps}
-                          onSelectProperty={handleSelectPropToggle}
-                          selectedProperty={chatProp}
-                          favorites={favAddresses}
-                          onToggleFavorite={toggleFavorite}/>
+                    <div style={{display:"flex",gap:"22px",alignItems:"flex-start",minHeight:0}}>
+                      {/* Cards column — scrolls with page */}
+                      <div style={{flex:"1 1 0",minWidth:0,minHeight:0}}>
+                        <PropertyGrid properties={result.properties.slice(0,5)}
+                          onSelectProperty={p=>setChatProp(chatProp?.address===p.address?null:p)}
+                          selectedProperty={chatProp}/>
                       </div>
-                      <div style={{flex:"1 1 340px",minWidth:"320px",height:"calc(100dvh - 80px)",position:"sticky",top:"68px",overflowY:"hidden",display:"flex",flexDirection:"column"}}>
+                      {/* Chat column — sticky, fills screen height */}
+                      <div style={{
+                        flex:"0 0 clamp(320px,32vw,440px)",
+                        minWidth:0,
+                        position:"sticky",
+                        top:"calc(var(--header-h,60px) + 16px)",
+                        alignSelf:"flex-start",
+                      }}>
                         <PropertyChat property={chatProp} mortgageRate={result.mortgage_rate||7.2} onClose={()=>{setChatProp(null);log.ui("Chat closed");}}/>
                       </div>
                     </div>
@@ -552,22 +527,7 @@ export default function Home() {
               )}
 
               {/* Charts view */}
-              {tab==="charts"&&<ComparisonCharts properties={displayProps} compact={false}/>}
-
-              {/* Favorites view */}
-              {tab==="favorites"&&(
-                favList.length===0
-                  ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"12px",padding:"60px 20px",color:"var(--t3)",textAlign:"center"}}>
-                      <div style={{fontSize:"48px"}}>❤️</div>
-                      <div style={{fontSize:"16px",fontWeight:700,color:"var(--t2)"}}>No saved properties yet</div>
-                      <div style={{fontSize:"13px"}}>Click the heart on any card to save it here</div>
-                    </div>
-                  : <PropertyGrid properties={favList}
-                      onSelectProperty={handleSelectProp}
-                      selectedProperty={chatProp}
-                      favorites={favAddresses}
-                      onToggleFavorite={toggleFavorite}/>
-              )}
+              {tab==="charts"&&<ComparisonCharts properties={result.properties.slice(0,5)} compact={false}/>}
             </>
           )}
         </main>

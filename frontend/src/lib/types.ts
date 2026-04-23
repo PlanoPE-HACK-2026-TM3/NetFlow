@@ -6,6 +6,8 @@ export interface SearchParams {
   strategy:       "LTR" | "STR" | "BRRRR" | "Flip";
   prompt_text?:   string;
   location?:      string;
+  city?:          string;
+  state?:         string;
 }
 
 export interface Property {

@@ -44,13 +44,9 @@ function openDB(): Promise<IDBDatabase> {
         sh.createIndex("ts",       "ts",       { unique: false });
       }
 
-      // appLogs store used by src/lib/logger.ts. Must be created here so the
-      // two open()s against netflow_db don't race into a version-1 DB that's
-      // missing whichever file opened second.
-      if (!db.objectStoreNames.contains("appLogs")) {
-        const al = db.createObjectStore("appLogs", { keyPath: "id", autoIncrement: true });
-        al.createIndex("ts",    "ts",    { unique: false });
-        al.createIndex("level", "level", { unique: false });
+      if (!db.objectStoreNames.contains("favorites")) {
+        const fav = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
+        fav.createIndex("username", "username", { unique: false });
       }
     };
 
@@ -219,5 +215,41 @@ export async function clearSearchHistory(username: string) {
   const t = db.transaction("searchHistory", "readwrite");
   const s = t.objectStore("searchHistory");
   records.forEach(r => r.id !== undefined && s.delete(r.id));
+  db.close();
+}
+
+// ── Favorites ─────────────────────────────────────────────────
+
+export interface FavoriteRecord {
+  id?:      number;
+  username: string;
+  address:  string;
+  property: Record<string, unknown>;
+  ts:       number;
+}
+
+export async function getFavorites(username: string): Promise<FavoriteRecord[]> {
+  const db = await openDB();
+  const r  = await getAllByIndex<FavoriteRecord>(db, "favorites", "username", username);
+  db.close();
+  return r.sort((a, b) => b.ts - a.ts);
+}
+
+export async function addFavorite(rec: Omit<FavoriteRecord, "id">) {
+  const db       = await openDB();
+  const existing = await getAllByIndex<FavoriteRecord>(db, "favorites", "username", rec.username);
+  if (!existing.find(f => f.address === rec.address)) {
+    await tx(db, "favorites", "readwrite", s => s.add(rec));
+  }
+  db.close();
+}
+
+export async function removeFavorite(username: string, address: string) {
+  const db  = await openDB();
+  const all = await getAllByIndex<FavoriteRecord>(db, "favorites", "username", username);
+  const hit = all.find(f => f.address === address);
+  if (hit?.id !== undefined) {
+    await tx(db, "favorites", "readwrite", s => s.delete(hit.id!));
+  }
   db.close();
 }
