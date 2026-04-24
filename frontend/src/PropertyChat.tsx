@@ -155,18 +155,12 @@ export default function PropertyChat({property,mortgageRate,onClose}:Props) {
         if (res.status === 503) {
           setOllamaOk(false);
           setError(
-            "🦙 Ollama is not running.
-
-" +
-            "Fix:
-" +
-            "  1. Open a terminal
-" +
-            "  2. Run:  ollama serve
-" +
-            "  3. If llama3 not installed:  ollama pull llama3
-" +
-            "  4. Then ask your question again."
+            `🦙 Ollama is not running.\n\n` +
+            `Fix:\n` +
+            `  1. Open a terminal\n` +
+            `  2. Run:  ollama serve\n` +
+            `  3. If llama3 not installed:  ollama pull llama3\n` +
+            `  4. Then ask your question again.`
           );
           setLoading(false);
           return;
@@ -193,9 +187,7 @@ export default function PropertyChat({property,mortgageRate,onClose}:Props) {
     } catch(e:unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       if (msg.includes("timed out") || msg.includes("abort")) {
-        setError("⏱️ Request timed out (90s).
-
-Ollama may be loading the model for the first time. Try again in 30 seconds.");
+        setError(`⏱️ Request timed out (90s).\n\nOllama may be loading the model for the first time. Try again in 30 seconds.`);
       } else {
         setError(`Error: ${msg}`);
       }
@@ -238,19 +230,41 @@ Ollama may be loading the model for the first time. Try again in 30 seconds.");
       )}
 
       {/* Stats bar */}
-      <div style={{padding:"8px 14px",background:"var(--bg-raise)",borderBottom:"1px solid var(--bd)",display:"flex",gap:"12px",flexShrink:0,overflowX:"auto"}}>
+      <div style={{padding:"8px 14px",background:"var(--bg-raise)",borderBottom:"1px solid var(--bd)",display:"flex",gap:"12px",alignItems:"center",flexShrink:0,overflowX:"auto"}}>
         {[
           {icon:"💵",lbl:"Price",    val:`$${property.price.toLocaleString()}`,    c:"var(--pri-hi)"},
           {icon:"🏠",lbl:"Rent/mo",  val:`$${property.est_rent.toLocaleString()}`,  c:"var(--grn)"},
           {icon:"💰",lbl:"Cash Flow",val:`$${property.cash_flow.toLocaleString()}`, c:cfColor(property.cash_flow)},
           {icon:"📈",lbl:"Cap Rate", val:`${property.cap_rate}%`,                   c:"var(--pri-hi)"},
-          {icon:"🏆",lbl:"Score",  val:`${property.ai_score}/100`,                c:property.ai_score>=70?"var(--grn)":"var(--amb)"},
         ].map(m=>(
           <div key={m.lbl} style={{flexShrink:0}}>
             <div style={{fontSize:"11px",fontWeight:800,color:m.c,fontFamily:"'JetBrains Mono',monospace"}}>{m.icon} {m.val}</div>
             <div style={{fontSize:"9px",color:"var(--t3)",fontWeight:600}}>{m.lbl}</div>
           </div>
         ))}
+
+        <div style={{marginLeft:"auto", display:"flex", alignItems:"center", gap:"8px", flexShrink:0}}>
+          <div style={{display:"flex", flexDirection:"column", alignItems:"flex-end"}}>
+            <div style={{fontSize:"9px",color:"var(--t3)",fontWeight:600, display:"flex", alignItems:"center", gap:"4px"}}>
+              Score
+              <span title="AI generated score based on property metrics" style={{cursor:"help", fontSize:"10px", color:"var(--pri-hi)"}}>ℹ️</span>
+            </div>
+            <div style={{fontSize:"11px",fontWeight:800,color:property.ai_score>=70?"var(--grn)":"var(--amb)",fontFamily:"'JetBrains Mono',monospace"}}>
+              {property.ai_score}/100
+            </div>
+          </div>
+          <div style={{position:"relative",width:"32px",height:"32px"}}>
+            <svg width="32" height="32" viewBox="0 0 36 36" style={{transform:"rotate(-90deg)"}}>
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(128,128,128,0.15)" strokeWidth="3"/>
+              <circle cx="18" cy="18" r="15" fill="none" stroke={property.ai_score>=70?"var(--grn)":"var(--amb)"} strokeWidth="3"
+                strokeDasharray={`${(property.ai_score/100)*(2*Math.PI*15)} ${2*Math.PI*15}`} strokeLinecap="round"
+                style={{transition:"stroke-dasharray .9s ease"}}/>
+            </svg>
+            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px"}}>
+              {property.ai_score>=85?"🏆":property.ai_score>=70?"⭐":property.ai_score>=55?"✅":"⚠️"}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
