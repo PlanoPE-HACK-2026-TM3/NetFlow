@@ -52,6 +52,28 @@ export function setCachedResult(p: SearchParams & { prompt_text?: string }, resu
   _cache.set(_cacheKey(p), { result, ts: Date.now() });
 }
 
+function parseBudgetInput(raw: string): number {
+  const t = raw.trim();
+  if (!t) return 450000;
+
+  const m = t.match(/\$?\s*([\d,.]+)\s*([kKmM])?$/);
+  if (!m) {
+    const fallback = parseInt(t.replace(/\D/g, ""), 10);
+    return fallback > 0 ? fallback : 450000;
+  }
+
+  let value = parseFloat(m[1].replace(/,/g, ""));
+  const suffix = (m[2] || "").toLowerCase();
+  if (suffix === "k") value *= 1000;
+  if (suffix === "m") value *= 1_000_000;
+
+  // Treat small naked values like "450" as shorthand for "$450k".
+  if (!suffix && value > 0 && value < 10000) value *= 1000;
+
+  const n = Math.round(value);
+  return n > 0 ? n : 450000;
+}
+
 // ── Web Speech API types ──────────────────────────────────────
 declare global {
   interface Window {
@@ -122,6 +144,8 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const parseTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const correctTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textaRef     = useRef<HTMLTextAreaElement>(null);
+  const parseAbortRef = useRef<AbortController | null>(null);
+  const parseSeqRef = useRef(0);
 
   // Voice support detection
   useEffect(() => {
@@ -137,15 +161,30 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   // Auto-parse prompt (debounced)
   const doParse = useCallback(async (text: string) => {
     if (text.trim().length < 3) { setParsed(null); return; }
+    parseAbortRef.current?.abort();
+    const controller = new AbortController();
+    parseAbortRef.current = controller;
+    const seq = ++parseSeqRef.current;
     setParsing(true);
     try {
       const res  = await fetch(`${API_BASE}/api/parse-prompt`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ prompt: text }),
+        signal: controller.signal,
       });
-      setParsed(await res.json());
-    } catch { setParsed(null); }
-    finally  { setParsing(false); }
+      const nextParsed = await res.json();
+      if (seq === parseSeqRef.current) {
+        setParsed(nextParsed);
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setParsed(null);
+      }
+    } finally  {
+      if (seq === parseSeqRef.current) {
+        setParsing(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -176,6 +215,15 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     if (correctTimer.current) clearTimeout(correctTimer.current);
     applyCorrection(prompt);
   };
+
+  useEffect(() => {
+    return () => {
+      if (parseTimer.current) clearTimeout(parseTimer.current);
+      if (correctTimer.current) clearTimeout(correctTimer.current);
+      parseAbortRef.current?.abort();
+      recognRef.current?.stop();
+    };
+  }, []);
 
   // ── Voice input ───────────────────────────────────────────
   const startVoice = () => {
@@ -221,7 +269,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const hasText = prompt.trim().length >= 3;
 
   const finalZip    = zipOver.trim()    || parsed?.zip_code   || (isZip ? prompt.trim() : "75070");
-  const finalBudget = budgetOver.trim() ? (parseInt(budgetOver.replace(/\D/g,"")) || 450000)
+  const finalBudget = budgetOver.trim() ? parseBudgetInput(budgetOver)
                                         : (parsed?.budget || 450000);
   const finalType   = (typeOver  || parsed?.property_type || "SFH") as SearchParams["property_type"];
   const finalBeds   = bedsOver   ?? parsed?.min_beds ?? 3;

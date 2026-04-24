@@ -97,7 +97,7 @@ export default function PropertyChat({ property, mortgageRate, onClose }: Props)
       content: `${scoreE} **${property.address}**\n\n**Quick snapshot:**\n• 💵 Price: $${property.price.toLocaleString()}\n• 🏠 Rent: $${property.est_rent.toLocaleString()}/mo\n• 💰 Cash flow: $${netCF.toLocaleString()}/mo\n• 📈 Cap: ${property.cap_rate}% · CoC: ${coc}%\n• ${scoreE} AI Score: ${property.ai_score}/100\n\nAsk anything about this property.`,
     }]);
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [property.address]);
+  }, [property, mortgageRate]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
@@ -112,15 +112,13 @@ export default function PropertyChat({ property, mortgageRate, onClose }: Props)
     setLoading(true);
 
     try {
-      // Direct Anthropic API call — no backend key required
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch(`${API_BASE}/api/property-chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model:      "claude-haiku-4-5-20251001",
-          max_tokens: 800,
-          system:     buildSystemPrompt(property, mortgageRate),
-          messages:   newMsgs.map(m => ({ role: m.role, content: m.content })),
+          property,
+          mortgage_rate: mortgageRate,
+          messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
         }),
       });
 
@@ -129,9 +127,8 @@ export default function PropertyChat({ property, mortgageRate, onClose }: Props)
         throw new Error((err as { error?: { message?: string } }).error?.message || `API error ${res.status}`);
       }
 
-      const data  = await res.json();
-      const reply = data.content?.find((b: { type: string }) => b.type === "text")?.text
-                    || "No response received.";
+      const data = await res.json();
+      const reply = (data as { reply?: string }).reply || "No response received.";
       setMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";

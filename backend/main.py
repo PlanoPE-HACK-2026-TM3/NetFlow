@@ -13,18 +13,19 @@ Routes:
 import json
 import re
 import asyncio
+import uuid
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from langsmith import traceable
 from pydantic import BaseModel
 
 from backend.config import ALLOWED_ORIGINS, DEMO_MODE
 from backend.agents.netflow_agent import NetFlowAgent
-from backend.services.rentcast import RentCastService
-from backend.services.fred import FREDService
+from backend.services.rentcast import RentCastService, close_client as close_rentcast_client
+from backend.services.fred import FREDService, close_client as close_fred_client
 
 
 # ── City → ZIP lookup ─────────────────────────────────────────
@@ -86,20 +87,43 @@ def parse_prompt_to_params(text: str) -> dict:
 
     # ── City alone (no state) ────────────────────────────────
     if not zip_code and not city_st:
+        t_lower = f" {t.lower()} "
+        # Prefer longest city names first to avoid partial matches.
+        city_keys = sorted(CITY_ZIP.keys(), key=len, reverse=True)
+        for city_key in city_keys:
+            if re.search(rf"\b{re.escape(city_key)}\b", t_lower):
+                zip_code = CITY_ZIP[city_key]
+                city_name = city_key.title()
+                break
+
+    # Fallback pattern for phrasing like "in Austin" if still unresolved.
+    if not zip_code and not city_st:
         city_alone = re.search(
             r"(?:in|near|around|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", t
         )
         if city_alone:
-            zip_code = CITY_ZIP.get(city_alone.group(1).lower(), "")
+            city_name = city_alone.group(1).strip()
+            zip_code = CITY_ZIP.get(city_name.lower(), "")
 
     # ── Budget ────────────────────────────────────────────────
     budget = 450000
-    b_candidates = re.findall(r"\$?([\d,]+)\s*([kKmM]?)\b", t)
-    for raw, suffix in b_candidates:
+    b_candidates = re.findall(r"(\$?)\s*([\d,]+(?:\.\d+)?)\s*([kKmM]?)\b", t)
+    for dollar, raw, suffix in b_candidates:
         val = int(raw.replace(",", ""))
-        if suffix.lower() == "k":   val *= 1000
-        elif suffix.lower() == "m": val *= 1_000_000
-        elif val < 10_000:          val *= 1000
+        suffix_l = suffix.lower()
+
+        # Ignore plain ZIP token when user only typed location like "75070".
+        if zip_code and raw.replace(",", "") == zip_code and not dollar and not suffix_l:
+            continue
+
+        if suffix_l == "k":
+            val *= 1000
+        elif suffix_l == "m":
+            val *= 1_000_000
+        elif val < 10_000:
+            # Bare shorthand like "450" means $450k.
+            val *= 1000
+
         if 50_000 < val < 10_000_000:
             budget = val
             break
@@ -159,6 +183,7 @@ async def lifespan(app: FastAPI):
     mode = "DEMO (mock)" if DEMO_MODE else "LIVE (RentCast + FRED)"
     print(f"\n🏘️  NetFlow API — {mode}\n")
     yield
+    await asyncio.gather(close_rentcast_client(), close_fred_client())
 
 
 app = FastAPI(title="NetFlow API", version="1.0.0", lifespan=lifespan)
@@ -217,6 +242,156 @@ class ParseRequest(BaseModel):
     prompt: str
 
 
+class PropertyChatRequest(BaseModel):
+    property: dict
+    mortgage_rate: float
+    messages: list[dict[str, str]]
+
+
+async def _run_search_pipeline(req: SearchRequest, search_id: str, trace_source: str) -> dict:
+    p = req.resolve()
+    mortgage_rate, listings = await asyncio.gather(
+        fred.get_30yr_rate(),
+        rentcast.search_listings(
+            zip_code=p["zip_code"],
+            max_price=p["budget"],
+            property_type=p["property_type"],
+            min_beds=p["min_beds"],
+            limit=10,
+        ),
+    )
+
+    if not listings:
+        return {
+            "search_id": search_id,
+            "params": p,
+            "mortgage_rate": mortgage_rate,
+            "listings": [],
+            "scored": [],
+        }
+
+    rent_estimates = await rentcast.get_rent_estimates_parallel(listings, p["zip_code"])
+    for i, listing in enumerate(listings):
+        listing["est_rent"] = rent_estimates[i]
+        listing["mls_id"] = listing.get("rentcast_id", f"MLS-{p['zip_code']}-{i+1:04d}")
+        listing["map_query"] = f"{listing['address']}, {p['zip_code']}"
+        listing["photo_url"] = ""
+
+    scored = await agent.score_and_rank(
+        listings,
+        mortgage_rate,
+        p["strategy"],
+        langsmith_extra={
+            "tags": ["ui", trace_source, "search"],
+            "metadata": {
+                "trace_source": f"ui_{trace_source}",
+                "search_id": search_id,
+                "strategy": p["strategy"],
+                "zip_code": p["zip_code"],
+            },
+        },
+    )
+    return {
+        "search_id": search_id,
+        "params": p,
+        "mortgage_rate": mortgage_rate,
+        "listings": listings,
+        "scored": scored,
+    }
+
+
+@traceable(name="netflow.ui_search_flow")
+async def _stream_search_flow(
+    req: SearchRequest,
+    search_id: str,
+    langsmith_extra: dict | None = None,
+):
+    try:
+        p = req.resolve()
+        zip_code = p["zip_code"]
+        budget = p["budget"]
+        strategy = p["strategy"]
+        loc_disp = p["location_display"]
+
+        yield _sse("status", {"msg": f"🔍 Searching {loc_disp} — fetching rate & listings..."})
+        pipeline = await _run_search_pipeline(req, search_id, "stream")
+        mortgage_rate = pipeline["mortgage_rate"]
+        listings = pipeline["listings"]
+        scored = pipeline["scored"]
+
+        if not listings:
+            yield _sse("error", {"msg": f"No listings found in {loc_disp} under ${budget:,}. Try a higher budget or nearby ZIP."})
+            return
+
+        yield _sse("properties", {
+            "data":             [prop.model_dump() for prop in scored[:10]],
+            "mortgage_rate":    mortgage_rate,
+            "zip_code":         zip_code,
+            "location_display": loc_disp,
+            "demo_mode":        DEMO_MODE,
+            "search_params":    req.model_dump(),
+        })
+
+        yield _sse("ai_start", {})
+        async for token in agent.stream_market_summary(
+            zip_code=zip_code, budget=budget, strategy=strategy,
+            top_picks=scored[:3], mortgage_rate=mortgage_rate,
+            langsmith_extra={
+                "tags": ["ui", "stream", "summary"],
+                "metadata": {
+                    "trace_source": "ui_stream",
+                    "search_id": search_id,
+                    "strategy": strategy,
+                    "zip_code": zip_code,
+                },
+            },
+        ):
+            yield _sse("ai_token", {"token": token})
+
+        yield _sse("done", {})
+
+    except asyncio.CancelledError:
+        # Client disconnected while streaming; this is expected for SSE.
+        return
+
+    except Exception as exc:
+        yield _sse("error", {"msg": str(exc)})
+
+
+@traceable(name="netflow.ui_search_flow")
+async def _sync_search_flow(
+    req: SearchRequest,
+    search_id: str,
+    langsmith_extra: dict | None = None,
+) -> dict:
+    pipeline = await _run_search_pipeline(req, search_id, "sync")
+    p = pipeline["params"]
+    mortgage_rate = pipeline["mortgage_rate"]
+    scored = pipeline["scored"]
+    summary = await agent.market_summary(
+        zip_code=p["zip_code"], budget=p["budget"], strategy=p["strategy"],
+        top_picks=scored[:3], mortgage_rate=mortgage_rate,
+        langsmith_extra={
+            "tags": ["ui", "sync", "summary"],
+            "metadata": {
+                "trace_source": "ui_sync",
+                "search_id": search_id,
+                "strategy": p["strategy"],
+                "zip_code": p["zip_code"],
+            },
+        },
+    )
+    return {
+        "properties":     [prop.model_dump() for prop in scored[:10]],
+        "mortgage_rate":  mortgage_rate,
+        "market_summary": summary,
+        "zip_code":       p["zip_code"],
+        "location_display": p["location_display"],
+        "search_params":  req.model_dump(),
+        "demo_mode":      DEMO_MODE,
+    }
+
+
 # ── Routes ────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -229,65 +404,31 @@ async def parse_prompt_endpoint(req: ParseRequest):
     return parse_prompt_to_params(req.prompt)
 
 
+@app.post("/api/property-chat")
+async def property_chat(req: PropertyChatRequest):
+    if not req.messages:
+        raise HTTPException(status_code=400, detail="messages are required")
+    reply = await agent.property_chat(req.property, req.mortgage_rate, req.messages)
+    return {"reply": reply}
+
+
 @app.post("/api/search/stream")
 async def search_stream(req: SearchRequest):
-    async def event_generator():
-        try:
-            p         = req.resolve()
-            zip_code  = p["zip_code"]
-            budget    = p["budget"]
-            prop_type = p["property_type"]
-            min_beds  = p["min_beds"]
-            strategy  = p["strategy"]
-            loc_disp  = p["location_display"]
-
-            yield _sse("status", {"msg": f"🔍 Searching {loc_disp} — fetching rate & listings..."})
-
-            mortgage_rate, listings = await asyncio.gather(
-                fred.get_30yr_rate(),
-                rentcast.search_listings(
-                    zip_code=zip_code, max_price=budget,
-                    property_type=prop_type, min_beds=min_beds, limit=10,
-                ),
-            )
-
-            if not listings:
-                yield _sse("error", {"msg": f"No listings found in {loc_disp} under ${budget:,}. Try a higher budget or nearby ZIP."})
-                return
-
-            yield _sse("status", {"msg": f"💰 Fetching rent comps for {len(listings)} properties..."})
-            rent_estimates = await rentcast.get_rent_estimates_parallel(listings, zip_code)
-            for i, listing in enumerate(listings):
-                listing["est_rent"]   = rent_estimates[i]
-                listing["mls_id"]     = listing.get("rentcast_id", f"MLS-{zip_code}-{i+1:04d}")
-                listing["map_query"]  = f"{listing['address']}, {zip_code}"
-                listing["photo_url"]  = ""
-
-            yield _sse("status", {"msg": "🤖 Running AI scoring..."})
-            scored = await agent.score_and_rank(listings, mortgage_rate, strategy)
-
-            yield _sse("properties", {
-                "data":             [p.model_dump() for p in scored[:10]],
-                "mortgage_rate":    mortgage_rate,
-                "zip_code":         zip_code,
-                "location_display": loc_disp,
-                "demo_mode":        DEMO_MODE,
-            })
-
-            yield _sse("ai_start", {})
-            async for token in agent.stream_market_summary(
-                zip_code=zip_code, budget=budget, strategy=strategy,
-                top_picks=scored[:3], mortgage_rate=mortgage_rate,
-            ):
-                yield _sse("ai_token", {"token": token})
-
-            yield _sse("done", {})
-
-        except Exception as exc:
-            yield _sse("error", {"msg": str(exc)})
+    search_id = uuid.uuid4().hex
 
     return StreamingResponse(
-        event_generator(),
+        _stream_search_flow(
+            req,
+            search_id,
+            langsmith_extra={
+                "tags": ["ui", "search_flow", "stream"],
+                "metadata": {
+                    "trace_source": "ui_stream",
+                    "search_id": search_id,
+                    "route": "/api/search/stream",
+                },
+            },
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -296,33 +437,19 @@ async def search_stream(req: SearchRequest):
 @app.post("/api/search")
 async def search_properties(req: SearchRequest):
     try:
-        p = req.resolve()
-        mortgage_rate, listings = await asyncio.gather(
-            fred.get_30yr_rate(),
-            rentcast.search_listings(
-                zip_code=p["zip_code"], max_price=p["budget"],
-                property_type=p["property_type"], min_beds=p["min_beds"], limit=10,
-            ),
+        search_id = uuid.uuid4().hex
+        return await _sync_search_flow(
+            req,
+            search_id,
+            langsmith_extra={
+                "tags": ["ui", "search_flow", "sync"],
+                "metadata": {
+                    "trace_source": "ui_sync",
+                    "search_id": search_id,
+                    "route": "/api/search",
+                },
+            },
         )
-        rents = await rentcast.get_rent_estimates_parallel(listings, p["zip_code"])
-        for i, l in enumerate(listings):
-            l["est_rent"]  = rents[i]
-            l["mls_id"]    = l.get("rentcast_id", f"MLS-{p['zip_code']}-{i+1:04d}")
-            l["map_query"] = f"{l['address']}, {p['zip_code']}"
-        scored  = await agent.score_and_rank(listings, mortgage_rate, p["strategy"])
-        summary = await agent.market_summary(
-            zip_code=p["zip_code"], budget=p["budget"], strategy=p["strategy"],
-            top_picks=scored[:3], mortgage_rate=mortgage_rate,
-        )
-        return {
-            "properties":     [prop.model_dump() for prop in scored[:10]],
-            "mortgage_rate":  mortgage_rate,
-            "market_summary": summary,
-            "zip_code":       p["zip_code"],
-            "location_display": p["location_display"],
-            "search_params":  req.model_dump(),
-            "demo_mode":      DEMO_MODE,
-        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

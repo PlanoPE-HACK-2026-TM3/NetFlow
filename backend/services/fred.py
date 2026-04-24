@@ -26,6 +26,13 @@ def _get_client() -> httpx.AsyncClient:
         _client = httpx.AsyncClient(timeout=6.0)
     return _client
 
+
+async def close_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+
 # ── Simple TTL cache ──────────────────────────────────────────
 _rate_cache:    tuple[float, float] | None = None   # (timestamp, rate)
 _history_cache: dict[int, tuple[float, list]]  = {}  # months -> (timestamp, data)

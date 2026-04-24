@@ -1,7 +1,10 @@
 "use client";
 import type { Property } from "@/lib/types";
 
-interface Props { properties: Property[]; }
+interface Props {
+  properties: Property[];
+  compact?: boolean;
+}
 
 function ChartCard({title,sub,icon,children}:{title:string;sub:string;icon:string;children:React.ReactNode}){
   return(

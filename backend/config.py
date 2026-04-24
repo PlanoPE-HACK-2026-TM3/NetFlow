@@ -32,6 +32,7 @@ FRED_API_KEY:      str = os.getenv("FRED_API_KEY", "")
 # ── LangSmith ────────────────────────────────────────────────
 LANGCHAIN_API_KEY: str = os.getenv("LANGCHAIN_API_KEY", "")
 LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "netflow-hackathon")
+LANGSMITH_EVAL_ENABLED: bool = os.getenv("LANGSMITH_EVAL_ENABLED", "true").lower() == "true"
 
 # ── Ollama ───────────────────────────────────────────────────
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

@@ -40,6 +40,13 @@ def _get_client() -> httpx.AsyncClient:
         _client = httpx.AsyncClient(timeout=8.0)
     return _client
 
+
+async def close_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+
 # ── Simple caches ─────────────────────────────────────────────
 _rent_cache:   dict[str, tuple[float, int]]  = {}  # key -> (ts, rent)
 _market_cache: dict[str, tuple[float, dict]] = {}  # zip -> (ts, stats)

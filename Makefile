@@ -1,7 +1,7 @@
 # NetFlow — Developer Makefile
 # Usage: make <target>
 
-.PHONY: install backend frontend dev clean test
+.PHONY: install backend frontend dev clean test eval-langsmith
 
 # ── Setup ──────────────────────────────────────────────────────
 
@@ -46,6 +46,9 @@ test:
 	curl -sf http://localhost:8000/health | python3 -m json.tool
 	@echo "\nFrontend check..."
 	curl -sf http://localhost:3000 -o /dev/null && echo "✅ Frontend OK"
+
+eval-langsmith:
+	venv/bin/python backend/evals/run_langsmith_eval.py
 
 # ── Clean ──────────────────────────────────────────────────────
 

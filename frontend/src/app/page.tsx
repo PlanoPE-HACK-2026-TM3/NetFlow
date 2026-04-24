@@ -349,23 +349,38 @@ export default function Home() {
       if (!res.ok) throw new Error(`Backend returned ${res.status}`);
       if (!res.body) return;
 
-      const reader = res.body.getReader(); const decoder = new TextDecoder();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
       let partial: Partial<SearchResult> = {};
+      let buffer = "";
+      let searchRecorded = false;
 
       while (true) {
-        const { done, value } = await reader.read(); if (done) break;
-        const lines = decoder.decode(value).split("\n").filter(l=>l.startsWith("data: "));
-        for (const line of lines) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() || "";
+
+        for (const frame of frames) {
+          const line = frame.split("\n").find(l => l.startsWith("data: "));
+          if (!line) continue;
           try {
             const ev = JSON.parse(line.slice(6));
             if (ev.type==="status")      setStatusMsg(ev.msg);
             else if (ev.type==="properties") {
-              partial = {...partial, properties:ev.data, mortgage_rate:ev.mortgage_rate, zip_code:ev.zip_code, location_display:ev.location_display};
+              partial = {
+                ...partial,
+                properties: ev.data,
+                mortgage_rate: ev.mortgage_rate,
+                zip_code: ev.zip_code,
+                location_display: ev.location_display,
+                search_params: ev.search_params || params,
+              };
               setResult(partial as SearchResult);
               setLoading(false); setStreaming(true); setTab("list");
-              setCachedResult(params, partial as SearchResult);
-              // Record to DB search history
-              if (currentUser) {
+              if (currentUser && !searchRecorded) {
+                searchRecorded = true;
                 recordSearch({
                   username:    currentUser.username,
                   prompt:      params.prompt_text || params.zip_code || "",
@@ -392,6 +407,8 @@ export default function Home() {
             else if (ev.type==="error") { setStatusMsg(`❌ ${ev.msg}`); setLoading(false); }
           } catch(_) {}
         }
+
+        if (done) break;
       }
     } catch (e: unknown) {
       setStatusMsg(`Error: ${e instanceof Error ? e.message : "Unknown"}`);
