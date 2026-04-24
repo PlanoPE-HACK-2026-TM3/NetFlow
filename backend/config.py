@@ -30,10 +30,11 @@ RENTCAST_API_KEY:  str = os.getenv("RENTCAST_API_KEY", "")
 FRED_API_KEY:      str = os.getenv("FRED_API_KEY", "")
 
 # ── LangSmith ────────────────────────────────────────────────
-# Accept either naming convention. Newer docs use LANGSMITH_*, older use
-# LANGCHAIN_*. Whichever the user sets in .env, we honor it. Quotes are
-# stripped because some users wrap values in "..." and python-dotenv
-# used to not strip them, which confused the SDK.
+# Accept either naming convention. Newer LangSmith docs use LANGSMITH_*,
+# older LangChain classic uses LANGCHAIN_*. Whichever the user sets in
+# .env, honor it. Strip surrounding quotes because some users wrap values
+# in "..." and depending on the parser those quotes can end up inside the
+# string and confuse the SDK.
 def _clean(val: str) -> str:
     return val.strip().strip('"').strip("'")
 
@@ -74,7 +75,7 @@ ALLOWED_ORIGINS: list[str] = os.getenv(
 # ── Step 2: Write all four LangSmith vars into os.environ ────
 # NOTE on env var names:
 #   - LangChain (classic) reads LANGCHAIN_TRACING_V2
-#   - Newer LangSmith SDK (>=0.1.x) reads LANGSMITH_TRACING  (no _V2 suffix!)
+#   - Newer LangSmith SDK (>=0.1.x) reads LANGSMITH_TRACING  (no _V2 suffix)
 #   Both must be set because different code paths within the same install
 #   check different prefixes.
 if LANGCHAIN_API_KEY:
@@ -82,12 +83,12 @@ if LANGCHAIN_API_KEY:
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"]    = LANGCHAIN_PROJECT
     os.environ["LANGCHAIN_ENDPOINT"]   = LANGCHAIN_ENDPOINT
-    os.environ["LANGSMITH_TRACING"]    = "true"   # NOT _V2 — that was a classic traditional version
+    os.environ["LANGSMITH_TRACING"]    = "true"   # NOT _V2
     os.environ["LANGSMITH_API_KEY"]    = LANGCHAIN_API_KEY
     os.environ["LANGSMITH_PROJECT"]    = LANGCHAIN_PROJECT
     os.environ["LANGSMITH_ENDPOINT"]   = LANGCHAIN_ENDPOINT
-    # Stderr breadcrumb — shows up in `docker compose logs backend` so
-    # you can verify tracing is wired up without poking at the SDK.
+    # Stderr breadcrumb — shows up in `docker compose logs backend`
+    # so tracing status is visible without poking the SDK.
     import sys
     print(
         f"[config] LangSmith tracing ENABLED | project={LANGCHAIN_PROJECT} "

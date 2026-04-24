@@ -273,7 +273,6 @@
   background: var(--bg-surf);
   border: 1px solid var(--bd);
   border-radius: 18px;
-  overflow: hidden;
   cursor: pointer;
   box-shadow: 0 2px 14px rgba(0,0,0,.10);
   transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;

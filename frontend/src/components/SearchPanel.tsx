@@ -46,6 +46,11 @@ export function setCachedResult(p: SearchParams & { prompt_text?: string }, resu
 }
 
 // ── Web Speech API types ──────────────────────────────────────
+// The Web Speech API isn't always in TS's DOM lib. Declare what we
+// need. We deliberately do NOT declare SpeechRecognitionErrorCode —
+// some TS lib versions have it and collide (TS2300). We also use
+// `readonly results` / `readonly error` on the event types so we
+// match DOM lib modifiers where they exist.
 declare global {
   interface Window {
     SpeechRecognition: new() => SpeechRecognition;
@@ -59,9 +64,11 @@ declare global {
     onend:    (() => void) | null;
   }
   interface SpeechRecognitionEvent extends Event {
-    results: SpeechRecognitionResultList;
+    readonly results: SpeechRecognitionResultList;
   }
-  interface SpeechRecognitionErrorEvent extends Event { error: string; }
+  interface SpeechRecognitionErrorEvent extends Event {
+    readonly error: string;
+  }
 }
 
 interface Props {

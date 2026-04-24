@@ -48,6 +48,15 @@ function openDB(): Promise<IDBDatabase> {
         const fav = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
         fav.createIndex("username", "username", { unique: false });
       }
+
+      // appLogs store used by src/lib/logger.ts. Must be created here so
+      // the two open()s against netflow_db don't race into a DB version
+      // missing the store whichever file opened second.
+      if (!db.objectStoreNames.contains("appLogs")) {
+        const al = db.createObjectStore("appLogs", { keyPath: "id", autoIncrement: true });
+        al.createIndex("ts",    "ts",    { unique: false });
+        al.createIndex("level", "level", { unique: false });
+      }
     };
 
     req.onsuccess = (e) => resolve((e.target as IDBOpenDBRequest).result);
