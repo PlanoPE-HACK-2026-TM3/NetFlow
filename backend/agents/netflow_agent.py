@@ -762,7 +762,7 @@ class PropertyScorerAgent:
             s, t = _rule_based_score_fn(prop, ctx.strategy)
             results.append({**prop, "ai_score": s, "tags": t, "strategy_note": "",
                             "_idx": prop.get("_idx", 0)})
-        return sorted(results, key=lambda x: x.get("ai_score", 0), reverse=True)
+        return results
 
     def _assemble(self, ctx: AgentContext) -> list[ScoredProperty]:
         """

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { log } from "@/lib/logger";
 import type { SearchParams, ParsedPrompt } from "@/lib/types";
 import type { SearchRecord } from "@/lib/db";
@@ -73,7 +73,7 @@ interface Props {
 }
 
 const SH = ({ icon, label }: { icon:string; label:string }) => (
-  <div style={{ display:"flex", alignItems:"center", gap:"5px", fontSize:"10px", fontWeight:700, color:D.text3, letterSpacing:"0.8px", textTransform:"uppercase", marginBottom:"8px" }}>
+  <div style={{ display:"flex", alignItems:"center", gap:"5px", fontSize:"10px", fontWeight:700, color:D.text3, letterSpacing:"0.8px", marginBottom:"8px" }}>
     <span>{icon}</span>{label}
   </div>
 );
@@ -95,13 +95,6 @@ const chip = (on:boolean): React.CSSProperties => ({
   cursor:"pointer", transition:"all 0.15s", userSelect:"none",
   display:"flex", alignItems:"center", gap:"4px",
 });
-function Pill({ icon, val, color }: { icon:string; val:string; color:string }) {
-  return (
-    <span style={{ padding:"1px 7px", borderRadius:"5px", background:"var(--bg-raise)", border:"1px solid rgba(79,158,255,0.20)", fontSize:"11px", fontWeight:600, color, display:"flex", alignItems:"center", gap:"3px" }}>
-      {icon} {val}
-    </span>
-  );
-}
 
 export default function SearchPanel({ onSearch, loading, statusMsg, searchHistory, onHistorySelect }: Props) {
   const [prompt,     setPrompt]     = useState("");
@@ -116,14 +109,27 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
   // Overrides — all blank/null = not active
   const [zipOver,    setZipOver]    = useState("");
+  const [cityOver,   setCityOver]   = useState("");
+  const [stateOver,  setStateOver]  = useState("");
   const [budgetOver, setBudgetOver] = useState("");
   const [typeOver,   setTypeOver]   = useState<SearchParams["property_type"] | "">("");
   const [bedsOver,   setBedsOver]   = useState<number | null>(null);
   const [stratOver,  setStratOver]  = useState<SearchParams["strategy"] | "">("");
   const [showOver,   setShowOver]   = useState(false);
+  const [recentOpen, setRecentOpen] = useState(true);
 
-  // History panel
-  const [showHist,   setShowHist]   = useState(false);
+  const recentGroups = useMemo(() => {
+    const todayMs = new Date().setHours(0,0,0,0);
+    const yestMs  = todayMs - 864e5;
+    const weekMs  = todayMs - 7 * 864e5;
+    return [
+      { label:"Today",           items: searchHistory.filter(h => h.ts >= todayMs) },
+      { label:"Yesterday",       items: searchHistory.filter(h => h.ts >= yestMs && h.ts < todayMs) },
+      { label:"Previous 7 days", items: searchHistory.filter(h => h.ts >= weekMs  && h.ts < yestMs) },
+      { label:"Older",           items: searchHistory.filter(h => h.ts < weekMs) },
+    ].filter(g => g.items.length > 0);
+  }, [searchHistory]);
+
 
   const parseTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const correctTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -234,7 +240,10 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const breakEven = Math.round(monthly*1.15);
   const inp       = INP;
 
-  const overrideCount = [zipOver, budgetOver, typeOver, bedsOver !== null ? "x" : "", stratOver].filter(Boolean).length;
+  const overrideCount = useMemo(
+    () => [zipOver, cityOver, stateOver, budgetOver, typeOver, bedsOver !== null ? "x" : "", stratOver].filter(Boolean).length,
+    [zipOver, cityOver, stateOver, budgetOver, typeOver, bedsOver, stratOver]
+  );
 
   const hasOverride = overrideCount > 0;
 
@@ -252,6 +261,8 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       strategy:      finalStrat,
       prompt_text:   correctedPrompt,
       location:      parsed?.location_display || "",
+      city:          cityOver.trim() || parsed?.city || "",
+      state:         stateOver.trim() || parsed?.state || "",
     });
   };
 
@@ -365,6 +376,22 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
                 onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
                 onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
             </div>
+            <div style={{ display:"flex", gap:"8px" }}>
+              <div style={{ flex:2 }}>
+                <FL>City</FL>
+                <input style={inp} value={cityOver} onChange={e=>setCityOver(e.target.value)}
+                  placeholder="e.g. Austin"
+                  onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
+                  onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
+              </div>
+              <div style={{ flex:1 }}>
+                <FL>State</FL>
+                <input style={inp} value={stateOver} onChange={e=>setStateOver(e.target.value.toUpperCase().slice(0,2))}
+                  placeholder="TX"
+                  onFocus={e=>{e.target.style.borderColor=D.borderHi;e.target.style.boxShadow="0 0 0 3px rgba(79,158,255,0.10)";e.target.style.background="rgba(37,99,235,0.06)";}}
+                  onBlur={e=>{e.target.style.borderColor=D.border;e.target.style.boxShadow="none";e.target.style.background="var(--bg-raise)";}}/>
+              </div>
+            </div>
             <div>
               <FL>Max Budget</FL>
               <input style={inp} value={budgetOver} onChange={e=>setBudgetOver(e.target.value)}
@@ -400,7 +427,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
               </div>
             </div>
             {overrideCount > 0 && (
-              <button onClick={()=>{setZipOver("");setBudgetOver("");setTypeOver("");setBedsOver(null);setStratOver("");}}
+              <button onClick={()=>{setZipOver("");setCityOver("");setStateOver("");setBudgetOver("");setTypeOver("");setBedsOver(null);setStratOver("");}}
                 style={{ fontSize:"12px", color:D.red, background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:"7px", padding:"6px 12px", cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>
                 ✕ Clear all overrides
               </button>
@@ -426,57 +453,6 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
       <Div/>
 
-      {/* ── SEARCH HISTORY (from IndexedDB, per user) ─ */}
-      <div>
-        <button onClick={()=>setShowHist(v=>!v)}
-          style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", background:"none", border:"none", cursor:"pointer", padding:0 }}>
-          <SH icon="🕑" label="Search History" />
-          <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"8px" }}>
-            {searchHistory.length > 0 && (
-              <span style={{ fontSize:"10px", fontWeight:700, background:"rgba(79,158,255,0.28)", color:"#fff", borderRadius:"10px", padding:"1px 6px" }}>
-                {searchHistory.length}
-              </span>
-            )}
-            <span style={{ fontSize:"12px", color:D.text3, display:"inline-block", transform:showHist?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▼</span>
-          </div>
-        </button>
-
-        {showHist && (
-          <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-            {searchHistory.length === 0 ? (
-              <div style={{ fontSize:"12px", color:D.text3, padding:"8px 0" }}>No searches yet this session.</div>
-            ) : (
-              <>
-                {searchHistory.slice(0, 15).map((h, i) => (
-                  <div key={h.id ?? i}
-                    onClick={() => { setPrompt(h.prompt); onHistorySelect(h.prompt); setShowHist(false); }}
-                    style={{ padding:"9px 11px", borderRadius:"8px", background:"var(--bg-surf)", border:`1px solid ${D.border}`, cursor:"pointer", transition:"all 0.15s" }}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background="rgba(79,158,255,0.08)";(e.currentTarget as HTMLDivElement).style.borderColor=D.borderHi;}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background="var(--bg-surf)";(e.currentTarget as HTMLDivElement).style.borderColor=D.border;}}>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px" }}>
-                      <div style={{ fontSize:"12px", fontWeight:600, color:D.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
-                        🔍 {h.prompt}
-                      </div>
-                      <div style={{ fontSize:"10px", color:D.text3, flexShrink:0 }}>{h.resultCount} results</div>
-                    </div>
-                    <div style={{ display:"flex", gap:"5px", marginTop:"5px", flexWrap:"wrap", alignItems:"center" }}>
-                      <Pill icon="📮" val={(h.params as Record<string,string>).zip_code || "—"} color={D.text3}/>
-                      <Pill icon="💰" val={`$${((h.params as Record<string,number>).budget||0).toLocaleString()}`} color={D.text3}/>
-                      <Pill icon="📅" val={(h.params as Record<string,string>).strategy || "—"} color={D.text3}/>
-                      <span style={{ fontSize:"10px", color:D.text3, marginLeft:"auto", fontFamily:"'JetBrains Mono',monospace" }}>
-                        {new Date(h.ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      <Div/>
-
       {/* ── MORTGAGE CALCULATOR ──────────────────── */}
       <div>
         <SH icon="🧮" label="Mortgage Calculator"/>
@@ -489,6 +465,42 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
           ))}
         </div>
       </div>
+
+      {/* ── RECENT ───────────────────────────────────── */}
+      {recentGroups.length > 0 && (
+          <div>
+            <button onClick={()=>setRecentOpen(v=>!v)} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", background:"none", border:"none", cursor:"pointer", padding:"2px 6px 4px", borderRadius:"6px" }}
+              onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background="rgba(255,255,255,0.05)"}
+              onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background="transparent"}>
+              <span style={{ fontSize:"11px", fontWeight:600, color:D.text3, letterSpacing:"0.6px" }}>Recent</span>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke={D.text3} strokeWidth={1.8} strokeLinecap="round"
+                style={{ transform:recentOpen?"rotate(0deg)":"rotate(-90deg)", transition:"transform 0.18s" }}>
+                <polyline points="2,4 6,8 10,4"/>
+              </svg>
+            </button>
+            {recentOpen && (
+              <div style={{ display:"flex", flexDirection:"column" }}>
+                {recentGroups.map(g => (
+                  <div key={g.label}>
+                    <div style={{ fontSize:"10px", fontWeight:600, color:D.text3, padding:"6px 8px 2px", opacity:0.7 }}>{g.label}</div>
+                    {g.items.slice(0,7).map((h, i) => (
+                      <div key={h.id ?? i}
+                        onClick={() => { setPrompt(h.prompt); onHistorySelect(h.prompt); }}
+                        title={h.prompt}
+                        style={{ padding:"5px 8px", borderRadius:"6px", cursor:"pointer", transition:"background 0.12s" }}
+                        onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="rgba(255,255,255,0.06)"}
+                        onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
+                        <div style={{ fontSize:"13px", color:D.text2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.45 }}>
+                          {h.prompt || (h.params as Record<string,string>).zip_code || "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+      )}
 
     </div>
   );
