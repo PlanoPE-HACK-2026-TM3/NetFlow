@@ -179,8 +179,7 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
             display:"flex",alignItems:"center",justifyContent:"center",
             fontSize:"10px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",
             color:p.rank<=3?"#fff":"var(--t3)",
-            boxShadow:p.rank<=3?`0 2px 8px ${topColor}55`:"none",
-            flexShrink:0}}>
+            boxShadow:p.rank<=3?`0 2px 8px ${topColor}55`:"none"}}>
             {p.rank}
           </div>
           <div style={{flex:1,minWidth:0}}>
