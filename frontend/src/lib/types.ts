@@ -43,6 +43,7 @@ export interface SearchResult {
   zip_code:         string;
   location_display: string;
   request_id?:      string;
+  run_id?:          string;
   search_params?:   SearchParams;
 }
 

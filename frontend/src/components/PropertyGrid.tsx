@@ -1,7 +1,10 @@
 "use client";
-import { useState, memo } from "react";
+import { useState, memo, useMemo, useCallback } from "react";
 import { log } from "@/lib/logger";
 import type { Property } from "@/lib/types";
+
+const API_BASE = typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL
+  ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:8000";
 
 interface Props {
   properties:         Property[];
@@ -9,6 +12,7 @@ interface Props {
   selectedProperty:   Property | null;
   favorites?:         Set<string>;
   onToggleFavorite?:  (p: Property) => void;
+  runId?:             string;
 }
 
 /* ── Score helpers ─────────────────────────────────────────── */
@@ -21,6 +25,28 @@ const scoreInfo = (s: number) =>
 const cfColor  = (v: number) => v > 300 ? "#10b981" : v > 0 ? "#f59e0b" : "#f43f5e";
 const capColor = (v: number) => v >= 6  ? "#10b981" : v >= 4.5 ? "#f59e0b" : "#3b82f6";
 
+/* ── Quality pill ──────────────────────────────────────────── */
+const qColor = (v: number) =>
+  v >= 80 ? "#10b981" : v >= 60 ? "#3b82f6" : v >= 40 ? "#f59e0b" : "#f43f5e";
+
+function QualityPill({ label, value, tip, align = "center" }:
+  { label: string; value: number; tip: string; align?: "left" | "center" | "right" }) {
+  return (
+    <Tip text={tip} align={align}>
+      <div style={{
+        display:"inline-flex", alignItems:"center", gap:5,
+        padding:"3px 8px", borderRadius:7,
+        background:"var(--bg-raise)", border:"1px solid var(--bd)",
+        cursor:"help",
+      }}>
+        <span style={{ width:6, height:6, borderRadius:"50%", background:qColor(value), boxShadow:`0 0 6px ${qColor(value)}` }} />
+        <span style={{ fontSize:10, fontWeight:600, color:"var(--t3)", letterSpacing:".3px", textTransform:"uppercase" }}>{label}</span>
+        <span style={{ fontSize:11, fontWeight:700, color:"var(--t1)", fontFamily:"'JetBrains Mono',monospace" }}>{value}</span>
+      </div>
+    </Tip>
+  );
+}
+
 /* ── Photo palette per rank ────────────────────────────────── */
 const PALETTES: [string, string, string][] = [
   ["#071428","#0d2040","#2563eb"],
@@ -31,12 +57,15 @@ const PALETTES: [string, string, string][] = [
 ];
 
 /* ── Tooltip ───────────────────────────────────────────────── */
-function Tip({ children, text, right = false }:
-  { children: React.ReactNode; text: string; right?: boolean }) {
+function Tip({ children, text, align = "center" }:
+  { children: React.ReactNode; text: string; align?: "left" | "center" | "right" }) {
   const [open, setOpen] = useState(false);
+  const cls =
+    align === "right" ? " tip-right" :
+    align === "left"  ? " tip-left"  : "";
   return (
     <div
-      className={`tip-wrap${right ? " tip-right" : ""}${open ? " tip-open" : ""}`}
+      className={`tip-wrap${cls}${open ? " tip-open" : ""}`}
       tabIndex={0} role="button" aria-haspopup="true" aria-expanded={open}
       onClick={() => setOpen(v => !v)}
       onBlur={() => setOpen(false)}
@@ -78,11 +107,78 @@ function Heart({ active, onClick }: { active: boolean; onClick: () => void }) {
 }
 
 /* ── Property Card ─────────────────────────────────────────── */
-const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavorite, onToggleFavorite }:
-  { p: Property; onSelect: (p: Property) => void; selected: boolean; isFavorite: boolean; onToggleFavorite: (p: Property) => void }) {
+const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavorite, onToggleFavorite, runId }:
+  { p: Property; onSelect: (p: Property) => void; selected: boolean; isFavorite: boolean; onToggleFavorite: (p: Property) => void; runId?: string }) {
 
   const [showMap, setShowMap] = useState(false);
   const [showMLS, setShowMLS] = useState(false);
+  const [vote, setVote] = useState<"up" | "down" | null>(null);
+  const [voteSending, setVoteSending] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
+  const [showCommentBox, setShowCommentBox] = useState(false);
+  const [comment, setComment] = useState("");
+  const [savedComment, setSavedComment] = useState("");
+
+  // Stable id so reposting overwrites the previous feedback row in LangSmith
+  const feedbackId = useMemo(
+    () => `${runId || "no-run"}::${p.address}`,
+    [runId, p.address],
+  );
+
+  const sendFeedback = useCallback(async (
+    v: "up" | "down",
+    note?: string,
+  ) => {
+    if (!runId || voteSending) return;
+    setVoteSending(true);
+    setVoteError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          run_id:      runId,
+          feedback_id: feedbackId,
+          vote:        v,
+          rank:        p.rank,
+          address:     p.address,
+          score:       p.ai_score,
+          comment:     note ?? undefined,
+        }),
+      });
+      if (res.ok) {
+        setVote(v);
+        if (note !== undefined) setSavedComment(note);
+        log.ui("Feedback sent", { rank: p.rank, vote: v, hasNote: !!note });
+      } else {
+        const txt = await res.text().catch(() => "");
+        setVoteError(`Failed (${res.status})`);
+        log.warn("ui", "Feedback failed", { status: res.status, txt });
+      }
+    } catch (err) {
+      setVoteError("Network error");
+      log.warn("ui", "Feedback error", { err: String(err) });
+    } finally {
+      setVoteSending(false);
+    }
+  }, [runId, voteSending, feedbackId, p.rank, p.address, p.ai_score]);
+
+  const handleVoteClick = useCallback((v: "up" | "down") => {
+    // Toggle off if clicking the same vote, otherwise switch
+    if (vote === v) {
+      setVote(null);
+      setShowCommentBox(false);
+      return;
+    }
+    sendFeedback(v, savedComment || undefined);
+  }, [vote, sendFeedback, savedComment]);
+
+  const submitComment = useCallback(() => {
+    const trimmed = comment.trim();
+    if (!vote) return;
+    sendFeedback(vote, trimmed);
+    setShowCommentBox(false);
+  }, [comment, vote, sendFeedback]);
 
   const [dark, mid, accent] = PALETTES[(p.rank - 1) % 5];
   const { c: scoreC, label: scoreLabel } = scoreInfo(p.ai_score);
@@ -277,7 +373,7 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
         {/* Investment metrics */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7, marginBottom: 12 }}>
           {metrics.map((m, i) => (
-            <Tip key={m.key} text={m.tip} right={i === 2}>
+            <Tip key={m.key} text={m.tip} align={i === 2 ? "right" : "center"}>
               <div
                 style={{
                   textAlign: "center", padding: "11px 6px 9px", borderRadius: 10,
@@ -315,6 +411,145 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
             {p.ai_score}/100
           </span>
         </div>
+
+        {/* AI confidence + feedback row */}
+        {(runId || p.confidence_score != null) && (
+          <div onClick={e => e.stopPropagation()}
+            style={{
+              display:"flex", flexDirection:"column", gap:8,
+              marginBottom:12, padding:"8px 10px",
+              borderRadius:8, background:"var(--bg-raise)", border:"1px solid var(--bd)",
+            }}>
+            <div style={{
+              display:"grid",
+              gridTemplateColumns: runId ? "auto 1fr auto" : "auto 1fr",
+              alignItems:"center", gap:10,
+            }}>
+              {p.confidence_score != null && (
+                <QualityPill label="Conf" value={p.confidence_score} align="left"
+                  tip="Confidence — composite trust signal blending groundedness, correctness, and risk."/>
+              )}
+              {runId ? (
+                <span style={{
+                  fontSize:11, color:"var(--t3)", fontWeight:500,
+                  textAlign:"center", lineHeight:1.3,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                }}>
+                  {voteError ? voteError :
+                   vote === "up"   ? "Helpful — click 👍 to undo" :
+                   vote === "down" ? "Not helpful — click 👎 to undo" :
+                                     "Was this useful?"}
+                </span>
+              ) : <span/>}
+              {runId && (
+                <div style={{ display:"flex", gap:6, justifySelf:"end" }}>
+                  <button
+                    disabled={voteSending}
+                    onClick={() => handleVoteClick("up")}
+                    aria-pressed={vote === "up"}
+                    aria-label="Thumbs up"
+                    title={vote === "up" ? "Click to undo" : "Helpful"}
+                    style={{
+                      width:30, height:28, borderRadius:7,
+                      cursor: voteSending ? "wait" : "pointer",
+                      border:`1px solid ${vote === "up" ? "#10b981" : "var(--bd)"}`,
+                      background: vote === "up" ? "rgba(16,185,129,.18)" : "transparent",
+                      color: vote === "up" ? "#10b981" : "var(--t2)",
+                      fontSize:13, transition:"all .15s",
+                      opacity: voteSending ? 0.6 : 1,
+                    }}>
+                    👍
+                  </button>
+                  <button
+                    disabled={voteSending}
+                    onClick={() => handleVoteClick("down")}
+                    aria-pressed={vote === "down"}
+                    aria-label="Thumbs down"
+                    title={vote === "down" ? "Click to undo" : "Not helpful"}
+                    style={{
+                      width:30, height:28, borderRadius:7,
+                      cursor: voteSending ? "wait" : "pointer",
+                      border:`1px solid ${vote === "down" ? "#f43f5e" : "var(--bd)"}`,
+                      background: vote === "down" ? "rgba(244,63,94,.18)" : "transparent",
+                      color: vote === "down" ? "#f43f5e" : "var(--t2)",
+                      fontSize:13, transition:"all .15s",
+                      opacity: voteSending ? 0.6 : 1,
+                    }}>
+                    👎
+                  </button>
+                  <button
+                    disabled={!vote || voteSending}
+                    onClick={() => { setComment(savedComment); setShowCommentBox(s => !s); }}
+                    title={savedComment ? "Edit note" : "Add note"}
+                    aria-label="Add note"
+                    style={{
+                      width:30, height:28, borderRadius:7,
+                      cursor: (!vote || voteSending) ? "not-allowed" : "pointer",
+                      border:`1px solid ${showCommentBox ? "var(--pri)" : "var(--bd)"}`,
+                      background: showCommentBox ? "var(--pri-lo)" : "transparent",
+                      color: vote ? "var(--t2)" : "var(--t3)",
+                      fontSize:12, transition:"all .15s",
+                      opacity: vote ? 1 : 0.45,
+                    }}>
+                    💬
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {savedComment && !showCommentBox && (
+              <div style={{
+                fontSize:11, color:"var(--t2)", lineHeight:1.5,
+                padding:"6px 8px", borderRadius:6,
+                background:"var(--bg)", border:"1px dashed var(--bd)",
+                wordBreak:"break-word",
+              }}>
+                <span style={{ color:"var(--t3)", fontWeight:600 }}>Your note: </span>
+                {savedComment}
+              </div>
+            )}
+
+            {showCommentBox && (
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <textarea
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
+                  placeholder="Add a few words of context (optional)…"
+                  maxLength={280}
+                  rows={2}
+                  style={{
+                    width:"100%", resize:"vertical",
+                    fontFamily:"inherit", fontSize:12, lineHeight:1.45,
+                    padding:"8px 10px", borderRadius:7,
+                    background:"var(--bg)", color:"var(--t1)",
+                    border:"1px solid var(--bd)", outline:"none",
+                  }}/>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:10, color:"var(--t3)" }}>{comment.length}/280</span>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button onClick={() => { setShowCommentBox(false); setComment(savedComment); }}
+                      style={{
+                        padding:"5px 10px", borderRadius:6, fontSize:11, fontWeight:600,
+                        border:"1px solid var(--bd)", background:"transparent",
+                        color:"var(--t3)", cursor:"pointer",
+                      }}>
+                      Cancel
+                    </button>
+                    <button onClick={submitComment} disabled={voteSending}
+                      style={{
+                        padding:"5px 12px", borderRadius:6, fontSize:11, fontWeight:700,
+                        border:"none", color:"#fff", cursor:voteSending?"wait":"pointer",
+                        background:"linear-gradient(135deg,#2563eb,#1d4ed8)",
+                        opacity: voteSending ? 0.6 : 1,
+                      }}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tags */}
         {p.tags.length > 0 && (
@@ -439,7 +674,7 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
 });
 
 /* ── Grid export ─────────────────────────────────────────────── */
-export default memo(function PropertyGrid({ properties, onSelectProperty, selectedProperty, favorites, onToggleFavorite }: Props) {
+export default memo(function PropertyGrid({ properties, onSelectProperty, selectedProperty, favorites, onToggleFavorite, runId }: Props) {
   if (!properties?.length) return null;
   const noop = () => {};
   return (
@@ -449,7 +684,8 @@ export default memo(function PropertyGrid({ properties, onSelectProperty, select
           onSelect={onSelectProperty}
           selected={selectedProperty?.address === p.address}
           isFavorite={favorites?.has(p.address) ?? false}
-          onToggleFavorite={onToggleFavorite ?? noop} />
+          onToggleFavorite={onToggleFavorite ?? noop}
+          runId={runId} />
       ))}
     </div>
   );

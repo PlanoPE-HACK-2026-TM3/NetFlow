@@ -96,6 +96,17 @@ except Exception:
     get_current_run_tree = None
     _LS_FEEDBACK_AVAILABLE = False
 
+
+# Lazily-cached LangSmith client shared across feedback emissions
+_LS_CLIENT_SINGLETON = None
+
+
+def _shared_langsmith_client():
+    global _LS_CLIENT_SINGLETON
+    if _LS_CLIENT_SINGLETON is None and LangSmithClient is not None:
+        _LS_CLIENT_SINGLETON = LangSmithClient()
+    return _LS_CLIENT_SINGLETON
+
 try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
@@ -576,18 +587,20 @@ def emit_quality_feedback_to_langsmith(
         dist_correct = _metric_distribution([p.correctness_score for p in scored])
         dist_conf = _metric_distribution([p.confidence_score for p in scored])
 
-        client = LangSmithClient()
+        client = _shared_langsmith_client()
 
         sent = 0
 
-        def _send_feedback(**kwargs) -> None:
+        def _send_feedback(**kwargs) -> int:
             """Send one feedback item to all resolved run IDs without blocking on failure."""
             nonlocal sent
             key = kwargs.get("key", "unknown")
+            sent_this_key = 0
             for rid in run_ids:
                 try:
                     client.create_feedback(run_id=rid, **kwargs)
                     sent += 1
+                    sent_this_key += 1
                 except Exception as item_exc:
                     log.warning(
                         "LangSmith feedback item failed | run_id=%s | key=%s | err=%s",
@@ -595,6 +608,47 @@ def emit_quality_feedback_to_langsmith(
                         key,
                         item_exc,
                     )
+            return sent_this_key
+
+        def _send_feedback_with_aliases(keys: list[str], **kwargs) -> None:
+            """
+            Try primary key then aliases. Helps when a legacy/project-level key
+            conflicts with an existing feedback schema in LangSmith.
+            """
+            if not keys:
+                return
+
+            key_list = [k for k in keys if k]
+            if not key_list:
+                return
+
+            payload = dict(kwargs)
+            first_key = key_list[0]
+            payload["key"] = first_key
+            sent_count = _send_feedback(**payload)
+            if sent_count > 0:
+                return
+
+            for alias in key_list[1:]:
+                payload["key"] = alias
+                log.warning(
+                    "LangSmith feedback retrying alias key | primary=%s | alias=%s",
+                    first_key,
+                    alias,
+                )
+                sent_count = _send_feedback(**payload)
+                if sent_count > 0:
+                    log.info(
+                        "LangSmith feedback alias key succeeded | primary=%s | alias=%s",
+                        first_key,
+                        alias,
+                    )
+                    return
+
+            log.warning(
+                "LangSmith feedback failed for all keys | keys=%s",
+                key_list,
+            )
 
         common = {
             "source_info": {
@@ -613,8 +667,8 @@ def emit_quality_feedback_to_langsmith(
             # LangSmith feedback API accepts score precision up to 4 decimals.
             return round(float(percent) / 100.0, 4)
 
-        _send_feedback(
-            key="groundedness",
+        _send_feedback_with_aliases(
+            ["groundedness", "quality_groundedness"],
             score=_score_0_1(avg_grounded),
             value={
                 "avg_percent": avg_grounded,
@@ -635,8 +689,8 @@ def emit_quality_feedback_to_langsmith(
             ),
             **common,
         )
-        _send_feedback(
-            key="correctness",
+        _send_feedback_with_aliases(
+            ["correctness", "quality_correctness"],
             score=_score_0_1(avg_correct),
             value={
                 "avg_percent": avg_correct,
@@ -657,8 +711,8 @@ def emit_quality_feedback_to_langsmith(
             ),
             **common,
         )
-        _send_feedback(
-            key="confidence",
+        _send_feedback_with_aliases(
+            ["confidence", "quality_confidence"],
             score=_score_0_1(avg_conf),
             value={
                 "avg_percent": avg_conf,
@@ -681,13 +735,28 @@ def emit_quality_feedback_to_langsmith(
         )
 
         if token_usage:
+            # Prefer explicit estimated_* keys; otherwise sum per-stage counters
+            # (e.g. llm_score, risk_memos) so real LLM runs report > 0.
+            prompt_tokens = int(token_usage.get("estimated_prompt_tokens", 0))
+            completion_tokens = int(token_usage.get("estimated_completion_tokens", 0))
+            total_tokens = int(token_usage.get("estimated_total_tokens", 0))
+            if total_tokens == 0:
+                total_tokens = sum(
+                    int(v) for k, v in token_usage.items()
+                    if isinstance(v, (int, float))
+                    and k not in {"estimated_prompt_tokens",
+                                  "estimated_completion_tokens",
+                                  "estimated_total_tokens"}
+                )
             _send_feedback(
                 key="token_usage_estimate",
                 value={
                     "mode": "estimated_demo" if demo_mode else "estimated",
-                    "prompt_tokens": int(token_usage.get("estimated_prompt_tokens", 0)),
-                    "completion_tokens": int(token_usage.get("estimated_completion_tokens", 0)),
-                    "total_tokens": int(token_usage.get("estimated_total_tokens", 0)),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "per_stage": {k: v for k, v in token_usage.items()
+                                  if isinstance(v, (int, float))},
                 },
                 comment="Estimated token usage for this run (demo fallback, not provider-reported).",
                 **common,
@@ -709,13 +778,16 @@ def emit_quality_feedback_to_langsmith(
 # ══════════════════════════════════════════════════════════════
 
 # Agent 2 — Scorer: compact batch scoring
-SCORING_SYSTEM = """Score properties 0-100. c*30 + cf*25 + g*15 + d*10 + strategy*20.
-c: >6→90, 5-6→75, 4-5→55, <4→30.  cf: >400→100, 200-400→75, 0-200→40, <0→0.  g: <100→100, 100-130→70, 130-160→40, >160→10.  d: <14→100, <30→65, <60→30, ≥60→0.
-Strategy: LTR cf>200 +8, STR c>5.5 +8, BRRRR d>40 +8, Flip d<20 +8.
-Tag IDs: 0=Cash+,1=High cap,2=Hot deal,3=Value-add,4=Low DOM,5=High yield,6=Neg CF.
-Return ONLY valid JSON, same order, each object with keys score and t where t is a list of tag IDs. No explanation/markdown."""
+# Rubric is enforced by _rule_based_score_fn fallback; prompt only needs to elicit
+# JSON shape and let LLM nudge the score. Keep system minimal.
+SCORING_SYSTEM = (
+    'Score each input property 0-100 for the given strategy. '
+    'Return JSON array, same order, each item {"s":int,"t":[ids]}. '
+    'Tag ids: 0=Cash+ 1=High cap 2=Hot deal 3=Value-add 4=Low DOM 5=High yield 6=Neg CF. '
+    'Max 2 tags. JSON only, no prose.'
+)
 
-SCORING_HUMAN = "Strategy: {strategy} | Mortgage rate: {rate}%\nProperties:\n{data}"
+SCORING_HUMAN = "{strategy} @ {rate}%\n{data}"
 
 # Strategy reranking is rule-based (see _rule_strategy_rerank).
 # No LLM call needed — deterministic adjustments are faster and more reliable
@@ -727,25 +799,31 @@ STRATEGY_LABELS_LONG = {
     "Flip":  "Fix and flip",
 }
 
-# Agent 3 — Risk advisor: property risk memo
-RISK_MEMO_SYSTEM = """\
-2-sentence risk memo for real estate investor. Be specific, use numbers, max 50 words. Plain text only.\
-"""
+# Agent 3 — Risk advisor: single-property risk memo (legacy / not used in batch path)
+RISK_MEMO_SYSTEM = "2-sentence investor risk memo, <=40 words, numbers, plain text."
 
-RISK_MEMO_HUMAN = """\
-{address} | ${price:,} | {beds}bd | {year_built} | cap {cap_rate}% | CF ${cash_flow}/mo | GRM {grm}x | DOM {dom}d | Risk: {risk_level}
-Factors: {factors} | Mitigations: {mitigations}\
-"""
+RISK_MEMO_HUMAN = (
+    "{address} | ${price:,} | {beds}bd {year_built} | cap {cap_rate}% | "
+    "CF ${cash_flow}/mo | GRM {grm}x | DOM {dom}d | {risk_level}\n"
+    "Risks: {factors} | Fix: {mitigations}"
+)
+
+# Agent 3 — Risk advisor: BATCHED memos (one LLM call for N HIGH-risk properties)
+RISK_MEMO_BATCH_SYSTEM = (
+    'Write one 1-2 sentence investor risk memo per property. <=35 words each. '
+    'Be specific with numbers. Output exactly {n} numbered lines: "1. ...\\n2. ...". '
+    'Plain text only, no preamble.'
+)
+RISK_MEMO_BATCH_HUMAN = "{rows}"
 
 # Agent 1 — Market Analyst: narrative
-MARKET_SUMMARY_SYSTEM = "Concise real estate market summary, max 60 words. Numbers only, no filler."
+MARKET_SUMMARY_SYSTEM = "Concise market summary, 2 sentences, <=55 words. Numbers, no filler."
 
-MARKET_SUMMARY_HUMAN = """\
-ZIP {zip_code} | {strategy_label} | Rate {mortgage_rate}% | Budget ${budget:,}
-Top: {top1_addr} ${top1_price:,} cap {top1_cap}% CF ${top1_cf}/mo score {top1_score}
-Avg cap {avg_cap}% CF ${avg_cf}/mo | Rent ${avg_rent}/mo DOM {avg_dom}d
-2 sentences: outlook + top pick.\
-"""
+MARKET_SUMMARY_HUMAN = (
+    "ZIP {zip_code} | {strategy_label} | rate {mortgage_rate}%\n"
+    "Top: {top1_addr} ${top1_price:,} cap {top1_cap}% CF ${top1_cf}/mo s{top1_score}\n"
+    "Avg cap {avg_cap}% CF ${avg_cf}/mo rent ${avg_rent} dom {avg_dom}d"
+)
 
 STRATEGY_LABELS = {
     "LTR":   "Long-term rental",
@@ -753,6 +831,25 @@ STRATEGY_LABELS = {
     "BRRRR": "BRRRR",
     "Flip":  "Fix and flip",
 }
+
+
+# Pre-built prompt templates (avoid rebuilding on every invocation)
+_PROMPT_SCORING = ChatPromptTemplate.from_messages([
+    ("system", SCORING_SYSTEM),
+    ("human",  SCORING_HUMAN),
+])
+_PROMPT_RISK_MEMO = ChatPromptTemplate.from_messages([
+    ("system", RISK_MEMO_SYSTEM),
+    ("human",  RISK_MEMO_HUMAN),
+])
+_PROMPT_RISK_MEMO_BATCH = ChatPromptTemplate.from_messages([
+    ("system", RISK_MEMO_BATCH_SYSTEM),
+    ("human",  RISK_MEMO_BATCH_HUMAN),
+])
+_PROMPT_MARKET_SUMMARY = ChatPromptTemplate.from_messages([
+    ("system", MARKET_SUMMARY_SYSTEM),
+    ("human",  MARKET_SUMMARY_HUMAN),
+])
 
 
 # ══════════════════════════════════════════════════════════════
@@ -866,13 +963,9 @@ class MarketAnalystAgent:
         }
 
         try:
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", MARKET_SUMMARY_SYSTEM),
-                ("human",  MARKET_SUMMARY_HUMAN),
-            ])
-            # Cap summary at 72 tokens — 2 short sentences fit comfortably
-            summary_llm = llm.bind(num_predict=72, temperature=0.1)
-            chain = prompt | summary_llm | StrOutputParser()
+            # Cap summary at 64 tokens — 2 short sentences fit comfortably
+            summary_llm = llm.bind(num_predict=64, temperature=0.1)
+            chain = _PROMPT_MARKET_SUMMARY | summary_llm | StrOutputParser()
             char_count = 0
             async for chunk in chain.astream(template_vars):
                 char_count += len(chunk)
@@ -923,7 +1016,7 @@ class PropertyScorerAgent:
                         {"count": len(ctx.listings), "rate": mortgage_rate},
                         "ok", ctx.stage_times["enrich"])
 
-        if DEMO_MODE or not ctx.llm_available:
+        if (DEMO_MODE and not USE_OLLAMA_OVERRIDE) or not ctx.llm_available:
             ctx.fallback_used["scorer"] = True
             return self._rule_score_all(ctx)
 
@@ -949,12 +1042,10 @@ class PropertyScorerAgent:
         Compact 6-field input keeps prompt ≈ 300 tokens.
         """
         compact  = [compact_for_llm(p) for p in ctx.enriched]
-        prompt   = ChatPromptTemplate.from_messages([
-            ("system", SCORING_SYSTEM),
-            ("human",  SCORING_HUMAN),
-        ])
-        scorer_llm = llm.bind(num_predict=260, temperature=0.1)
-        chain = prompt | scorer_llm | StrOutputParser()
+        # Output budget: ~14 chars/item ({"s":NN,"t":[N,N]}) × N props + brackets.
+        # 18 tokens/item is plenty; cap conservatively to prevent runaway generation.
+        scorer_llm = llm.bind(num_predict=min(220, 30 + len(compact) * 18), temperature=0.1)
+        chain = _PROMPT_SCORING | scorer_llm | StrOutputParser()
 
         try:
             raw_text = await chain.ainvoke({
@@ -1207,42 +1298,49 @@ class RiskAdvisorAgent:
         llm,
         ctx: AgentContext,
     ) -> None:
-        """Generate concise LLM risk memos for HIGH-risk properties."""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", RISK_MEMO_SYSTEM),
-            ("human",  RISK_MEMO_HUMAN),
-        ])
-        # 50 words max per memo ≈ 55 completion tokens; prompt ~40
-        risk_llm = llm.bind(num_predict=55, temperature=0.1)
-        chain = prompt | risk_llm | StrOutputParser()
+        """
+        Generate concise LLM risk memos for HIGH-risk properties.
 
-        async def _gen_one(prop: dict, profile: RiskProfile) -> None:
-            try:
-                memo = await chain.ainvoke({
-                    "address":    prop.get("address", ""),
-                    "price":      prop.get("price",   0),
-                    "beds":       prop.get("beds",    0),
-                    "year_built": prop.get("year_built", "N/A"),
-                    "cap_rate":   prop.get("cap_rate",  0),
-                    "cash_flow":  prop.get("cash_flow", 0),
-                    "grm":        prop.get("grm",       0),
-                    "dom":        prop.get("dom",       0),
-                    "risk_score": profile.score,
-                    "risk_level": profile.overall_risk,
-                    "factors":    ", ".join(profile.factors) or "None identified",
-                    "mitigations":"; ".join(profile.mitigations) or "None",
-                })
-                profile.memo = memo.strip()
-                # ~55 completion + ~40 prompt per HIGH-risk property
-                ctx.token_usage["risk_memos"] = ctx.token_usage.get("risk_memos", 0) + 95
+        TOKEN-OPTIMIZED: batches all HIGH-risk properties into a SINGLE LLM call
+        instead of N parallel calls. Saves (N-1) system-prompt copies and reduces
+        round-trip overhead. Output is N numbered lines parsed back to per-property
+        memos. Falls back to rule-based memo on parse failure (no behavior change).
+        """
+        n = len(items)
+        if n == 0:
+            return
+
+        # Build compact numbered rows for the model.
+        rows = "\n".join(
+            f"{i+1}. {p.get('address','?')} | ${p.get('price',0):,} | "
+            f"{p.get('beds',0)}bd {p.get('year_built','?')} | "
+            f"cap {p.get('cap_rate',0)}% CF ${p.get('cash_flow',0)}/mo "
+            f"GRM {p.get('grm',0)}x DOM {p.get('dom',0)}d | "
+            f"risks: {', '.join(r.factors[:3]) or 'none'} | "
+            f"fix: {(r.mitigations[0] if r.mitigations else 'inspect')}"
+            for i, (p, r) in enumerate(items)
+        )
+
+        # ~45 tokens/memo × N + small overhead; capped to prevent runaway.
+        risk_llm = llm.bind(num_predict=min(400, 30 + n * 50), temperature=0.1)
+        chain = _PROMPT_RISK_MEMO_BATCH | risk_llm | StrOutputParser()
+
+        try:
+            raw = await chain.ainvoke({"n": n, "rows": rows})
+            memos = _parse_numbered_memos(raw, n)
+            for (prop, profile), memo in zip(items, memos):
+                if memo:
+                    profile.memo = memo
                 ctx.record_tool("generate_risk_memo",
-                                {"address": prop.get("address","")},
+                                {"address": prop.get("address", "")},
                                 "ok", 0.0)
-            except Exception as e:
-                log.warning("Risk memo LLM failed for %s: %s",
-                            prop.get("address",""), e)
-
-        await asyncio.gather(*[_gen_one(p, r) for p, r in items])
+            # ~30 prompt overhead + ~50 tok per memo (one shared system prompt)
+            ctx.token_usage["risk_memos"] = ctx.token_usage.get("risk_memos", 0) + 30 + n * 55
+            log_risk.debug("Risk memos batched | n=%d est_tokens=%d", n, 30 + n * 55)
+        except Exception as e:
+            log.warning("Batched risk memo LLM failed: %s (keeping rule-based memos)", e)
+            ctx.errors.append(f"risk_memos: {e}")
+            ctx.fallback_used["risk_memos"] = True
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1278,8 +1376,8 @@ class NetFlowAgent:
                 model       = OLLAMA_MODEL,
                 temperature = 0.1,
                 base_url    = OLLAMA_BASE_URL,
-                # Global ceiling; per-stage tighter caps are applied via llm.bind(...)
-                num_predict = 220,
+                # Global safety ceiling; per-stage tighter caps applied via llm.bind(...)
+                num_predict = 180,
             )
         return self._llm
 
@@ -1427,7 +1525,7 @@ class NetFlowAgent:
         mortgage_rate: float,
         fallback_used: bool = False,
     ) -> AsyncIterator[str]:
-        if DEMO_MODE:
+        if DEMO_MODE and not USE_OLLAMA_OVERRIDE:
             mc = MarketMemory.get(zip_code)
             ctx = AgentContext(zip_code=zip_code, budget=budget,
                                strategy=strategy, market_ctx=mc)
@@ -1519,6 +1617,25 @@ def _rule_risk_memo(factors: list[str], mitigations: list[str]) -> str:
     f_str = " and ".join(factors[:2])
     m_str = mitigations[0] if mitigations else "Conduct thorough inspection."
     return f"Key concerns: {f_str}. Recommended action: {m_str}."
+
+
+def _parse_numbered_memos(raw: str, n: int) -> list[str]:
+    """
+    Parse "1. memo a\n2. memo b\n..." into a list of length n.
+    Tolerates extra whitespace, missing numbers, or markdown bullets.
+    Missing entries return as empty strings (caller keeps rule-based memo).
+    """
+    import re
+    if not raw:
+        return [""] * n
+    # Split on lines starting with "<digits>." or "<digits>)".
+    parts = re.split(r"(?m)^\s*\d+[.)]\s*", raw.strip())
+    # First chunk before "1." is preamble; drop it.
+    items = [p.strip() for p in parts if p.strip()]
+    # Pad / truncate to n.
+    if len(items) < n:
+        items += [""] * (n - len(items))
+    return items[:n]
 
 
 def _rule_summary(

@@ -598,13 +598,10 @@ async def search_stream(req: SearchRequest, request: Request):
                 "location_display": loc_disp,
                 "demo_mode":        DEMO_MODE,
                 "request_id":       req_id,
+                "run_id":           parent_run_id,
             })
 
             yield _sse("ai_start", {})
-            fallback = any(
-                getattr(p, "__dict__", {})
-                for p in scored
-            )
             buf: list[str] = []
             async for token in agent.stream_market_summary(
                 zip_code=zip_code, budget=budget, strategy=strategy,
@@ -671,6 +668,7 @@ async def search_properties(req: SearchRequest):
             "search_params":  req.model_dump(),
             "demo_mode":      DEMO_MODE,
             "request_id":     req_id,
+            "run_id":         parent_run_id,
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -685,6 +683,83 @@ async def market_data(zip_code: str):
 @app.get("/api/rate-history")
 async def rate_history(months: int = 12):
     return {"history": await fred.get_rate_history(months)}
+
+
+# ── User feedback → LangSmith ─────────────────────────────────
+class UserFeedbackRequest(BaseModel):
+    run_id:      str
+    vote:        str               # "up" | "down"
+    rank:        int | None = None
+    address:     str | None = None
+    score:       int | None = None
+    comment:     str | None = None
+    feedback_id: str | None = None  # stable id → re-submitting overwrites prior vote
+
+
+# Cached LangSmith client + UUID namespace, lazily initialised
+_LS_CLIENT = None
+_FEEDBACK_NS = uuid.UUID("c1f1d4ee-1b2a-4d39-9f1b-1e7a3a7b5c00")
+
+
+def _get_langsmith_client():
+    global _LS_CLIENT
+    if _LS_CLIENT is None:
+        from langsmith import Client as LangSmithClient
+        _LS_CLIENT = LangSmithClient()
+    return _LS_CLIENT
+
+
+@app.post("/api/feedback")
+async def submit_user_feedback(req: UserFeedbackRequest):
+    """
+    Attach a user thumbs up/down (and optional note) to the LangSmith run.
+    Re-submissions with the same `feedback_id` overwrite the previous vote.
+    """
+    if not LANGCHAIN_API_KEY:
+        raise HTTPException(status_code=503, detail="LangSmith API key not configured")
+    if not req.run_id:
+        raise HTTPException(status_code=400, detail="run_id is required")
+    vote = (req.vote or "").lower().strip()
+    if vote not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="vote must be 'up' or 'down'")
+
+    try:
+        client = _get_langsmith_client()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"langsmith client unavailable: {exc}")
+
+    # Stable UUID derived from the supplied feedback_id so repeats overwrite
+    fb_id = None
+    if req.feedback_id:
+        try:
+            fb_id = uuid.uuid5(_FEEDBACK_NS, req.feedback_id)
+        except Exception:
+            fb_id = None
+
+    score = 1.0 if vote == "up" else 0.0
+    note = (req.comment or "").strip() or None
+    payload_value = {
+        "vote": vote,
+        "rank": req.rank,
+        "address": req.address,
+        "model_score": req.score,
+        "note": note,
+    }
+    try:
+        client.create_feedback(
+            run_id=req.run_id,
+            key="user_feedback",
+            score=score,
+            value=payload_value,
+            comment=note or f"User {vote} for rank={req.rank}",
+            source_info={"address": req.address or "", "rank": req.rank},
+            feedback_id=fb_id,
+        )
+    except Exception as exc:
+        log.warning("user feedback publish failed | run_id=%s | err=%s", req.run_id, exc)
+        raise HTTPException(status_code=502, detail=f"feedback publish failed: {exc}")
+
+    return {"ok": True, "run_id": req.run_id, "vote": vote, "has_note": bool(note)}
 
 
 class OllamaChatRequest(BaseModel):
