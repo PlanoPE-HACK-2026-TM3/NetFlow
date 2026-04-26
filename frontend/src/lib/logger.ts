@@ -4,6 +4,8 @@
  * Logs key actions (search, login, AI calls) and errors to console + DB.
  */
 
+import { DB_NAME, DB_VERSION, initDB } from "@/lib/db";
+
 export type LogLevel = "info" | "warn" | "error" | "debug";
 
 export interface LogEntry {
@@ -52,8 +54,9 @@ function write(level: LogLevel, category: string, message: string, meta?: Record
 
 async function persistLog(entry: LogEntry) {
   if (typeof indexedDB === "undefined") return;
+  await initDB();
   return new Promise<void>((res) => {
-    const req = indexedDB.open("netflow_db", 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onsuccess = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains("appLogs")) { db.close(); res(); return; }

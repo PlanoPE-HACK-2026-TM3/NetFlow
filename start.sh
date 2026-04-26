@@ -17,7 +17,14 @@ echo -e "${NC}  AI-powered real estate investment intelligence\n"
 # ── Check .env ──────────────────────────────────────────────
 if [ ! -f ".env" ]; then
   echo -e "${YELLOW}⚠  .env not found — creating from template...${NC}"
-  cp .env.example .env
+  if [ -f ".env.example" ]; then
+    cp .env.example .env
+  elif [ -f "env.example" ]; then
+    cp env.example .env
+  else
+    echo -e "${RED}❌ Neither .env.example nor env.example found.${NC}"
+    exit 1
+  fi
   echo -e "${YELLOW}   DEMO_MODE will be active (no real API calls).${NC}"
   echo -e "   Edit .env to add your RentCast + FRED keys for live data.\n"
 fi
@@ -79,7 +86,7 @@ cd frontend
 
 if [ ! -d "node_modules" ]; then
   echo "  Installing Node dependencies (first time only)..."
-  npm install
+  npm install --legacy-peer-deps
 fi
 
 # Ensure .env.local exists

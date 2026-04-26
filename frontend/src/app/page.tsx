@@ -342,7 +342,8 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/api/search/stream`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(params)});
       if(!res.ok) throw new Error(`Backend ${res.status}`);
       if(!res.body) return;
-      const reader=res.body.getReader(); const dec=new TextDecoder("utf-8",{fatal:false}); let partial:Partial<SearchResult>={};
+      const reader=res.body.getReader(); const dec=new TextDecoder("utf-8",{fatal:false});
+      let partial:Partial<SearchResult>={market_summary:"",search_params:params};
 
       while(true){
         const {done,value}=await reader.read(); if(done) break;
@@ -357,14 +358,38 @@ export default function Home() {
             }
             else if(ev.type==="status")   { setStatusMsg(ev.msg); log.api("SSE status",{msg:ev.msg}); }
             else if(ev.type==="properties"){
-              partial={...partial,properties:ev.data,mortgage_rate:ev.mortgage_rate,zip_code:ev.zip_code,location_display:ev.location_display};
-              setResult(partial as SearchResult); setLoading(false); setTab("list");
-              setCachedResult(params,partial as SearchResult);
+              const nextResult: SearchResult = {
+                properties: ev.data ?? [],
+                mortgage_rate: ev.mortgage_rate ?? 0,
+                zip_code: ev.zip_code ?? "",
+                location_display: ev.location_display ?? "",
+                request_id: ev.request_id ?? "",
+                market_summary: partial.market_summary ?? "",
+                search_params: partial.search_params ?? params,
+              };
+              partial={...partial,...nextResult};
+              setResult(nextResult); setLoading(false); setTab("list");
+              setCachedResult(params,nextResult);
               log.search("Properties received",{count:ev.data?.length||0,zip:ev.zip_code});
               if(currentUser) recordSearch({username:currentUser.username,prompt:queryLabel,params:params as unknown as Record<string,unknown>,resultCount:ev.data?.length||0,ts:Date.now()}).then(()=>getSearchHistory(currentUser.username).then(setSearchHist));
             }
             else if(ev.type==="done")  { setStatusMsg(""); log.search("Search complete"); }
-            else if(ev.type==="error") { setStatusMsg(`❌ ${ev.msg}`); setLoading(false); log.err("search",`SSE error: ${ev.msg}`); }
+            else if(ev.type==="error") {
+              const msg = String(ev.msg || "");
+              const isGuidance = msg.includes("NetFlow is a real estate investment tool") || msg.includes("Try:");
+              setLoading(false);
+              if (isGuidance) {
+                // Treat guardrail guidance as a clarification UX path, not a runtime error.
+                setStatusMsg("");
+                setClarifyMsg(msg);
+                const tryIdx = msg.indexOf("Try:");
+                setSuggestedPrompt(tryIdx >= 0 ? msg.slice(tryIdx + 4).trim() : "");
+                log.warn("search", `SSE guidance: ${msg}`);
+              } else {
+                setStatusMsg(`❌ ${msg}`);
+                log.err("search", `SSE error: ${msg}`);
+              }
+            }
           }catch(_){}
         }
       }

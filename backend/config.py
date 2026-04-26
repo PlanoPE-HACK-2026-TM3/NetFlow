@@ -43,6 +43,7 @@ OLLAMA_MODEL: str    = os.getenv("OLLAMA_MODEL", "llama3")
 #                   Falls back to mock data gracefully if API keys absent
 DEMO_MODE:  bool = os.getenv("DEMO_MODE",  "false").lower() == "true"
 DEBUG_MODE: bool = os.getenv("DEBUG",      "false").lower() in ("true","1","yes")
+USE_OLLAMA_OVERRIDE: bool = os.getenv("USE_OLLAMA_OVERRIDE", "false").lower() == "true"
 
 # Whether live APIs are available (informational — used for status messages)
 LIVE_DATA: bool = bool(RENTCAST_API_KEY and FRED_API_KEY)

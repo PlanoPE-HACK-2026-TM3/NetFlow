@@ -33,13 +33,38 @@ const STRATEGIES = [
 // ── In-memory search cache (session, 15min TTL) ───────────────
 const _cache = new Map<string, { result: unknown; ts: number }>();
 const CACHE_TTL = 15 * 60 * 1000;
+const CACHE_SCHEMA_VERSION = 2;
 
 function _cacheKey(p: SearchParams & { prompt_text?: string }) {
-  return JSON.stringify({ z:p.zip_code, b:p.budget, t:p.property_type, d:p.min_beds, s:p.strategy });
+  return JSON.stringify({
+    v: CACHE_SCHEMA_VERSION,
+    z: p.zip_code,
+    b: p.budget,
+    t: p.property_type,
+    d: p.min_beds,
+    s: p.strategy,
+    q: (p.prompt_text || "").trim().toLowerCase(),
+  });
 }
+
+function hasQualityScores(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  const props = (result as { properties?: unknown }).properties;
+  if (!Array.isArray(props) || props.length === 0) return false;
+  const first = props[0];
+  if (!first || typeof first !== "object") return false;
+  return ["groundedness_score", "correctness_score", "confidence_score"]
+    .every((key) => key in (first as Record<string, unknown>));
+}
+
 export function getCachedResult(p: SearchParams & { prompt_text?: string }) {
   const e = _cache.get(_cacheKey(p));
-  return e && Date.now() - e.ts < CACHE_TTL ? e.result : null;
+  if (!e || Date.now() - e.ts >= CACHE_TTL) return null;
+  if (!hasQualityScores(e.result)) {
+    _cache.delete(_cacheKey(p));
+    return null;
+  }
+  return e.result;
 }
 export function setCachedResult(p: SearchParams & { prompt_text?: string }, result: unknown) {
   _cache.set(_cacheKey(p), { result, ts: Date.now() });
@@ -247,22 +272,51 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
 
   const hasOverride = overrideCount > 0;
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     // Allow search with EITHER prompt text OR active override filters
     if (!hasText && !hasOverride) return;
+
     // Apply spell correction one last time before searching
     const correctedPrompt = silentCorrect(prompt.trim());
     if (correctedPrompt !== prompt) setPrompt(correctedPrompt);
+
+    // Parse latest prompt at submit time to avoid debounce race/stale values.
+    let effectiveParsed = parsed;
+    if (correctedPrompt.length >= 3) {
+      try {
+        const res = await fetch(`${API_BASE}/api/parse-prompt`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: correctedPrompt }),
+        });
+        if (res.ok) {
+          effectiveParsed = await res.json();
+          setParsed(effectiveParsed);
+        }
+      } catch {
+        // Keep using the last parsed value when submit-time parse fails.
+      }
+    }
+
+    const promptIsZip = /^\d{5}$/.test(correctedPrompt);
+    const submitZip = zipOver.trim() || effectiveParsed?.zip_code || (promptIsZip ? correctedPrompt : "");
+    const submitBudget = budgetOver.trim()
+      ? (parseInt(budgetOver.replace(/\D/g, "")) || 450000)
+      : (effectiveParsed?.budget || 450000);
+    const submitType = (typeOver || effectiveParsed?.property_type || "SFH") as SearchParams["property_type"];
+    const submitBeds = bedsOver ?? effectiveParsed?.min_beds ?? 3;
+    const submitStrategy = (stratOver || effectiveParsed?.strategy || "LTR") as SearchParams["strategy"];
+
     onSearch({
-      zip_code:      finalZip,
-      budget:        finalBudget,
-      property_type: finalType,
-      min_beds:      finalBeds,
-      strategy:      finalStrat,
+      zip_code:      submitZip,
+      budget:        submitBudget,
+      property_type: submitType,
+      min_beds:      submitBeds,
+      strategy:      submitStrategy,
       prompt_text:   correctedPrompt,
-      location:      parsed?.location_display || "",
-      city:          cityOver.trim() || parsed?.city || "",
-      state:         stateOver.trim() || parsed?.state || "",
+      location:      effectiveParsed?.location_display || "",
+      city:          cityOver.trim() || effectiveParsed?.city || "",
+      state:         stateOver.trim() || effectiveParsed?.state || "",
     });
   };
 

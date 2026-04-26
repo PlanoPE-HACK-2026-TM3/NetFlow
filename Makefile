@@ -12,7 +12,7 @@ install:
 	venv/bin/pip install -e . -q
 	venv/bin/pip install -r backend/requirements.txt -q
 	@echo "📦 Installing Node dependencies..."
-	cd frontend && npm install
+	cd frontend && npm install --legacy-peer-deps
 	@echo "✅ All dependencies installed."
 
 # ── Run ────────────────────────────────────────────────────────

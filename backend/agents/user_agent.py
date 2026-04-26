@@ -436,15 +436,36 @@ def _extract_params(text: str) -> dict:
                 result["location"] = ca.group(1).strip()
 
     # Budget
-    bm = re.findall(r"\$?\s*([\d,]+)\s*([kKmM]?)\b", t)
-    for raw, suf in bm:
+    def _normalize_budget(raw: str, suffix: str) -> int | None:
         v = int(raw.replace(",", ""))
-        if suf.lower() == "k":   v *= 1_000
-        elif suf.lower() == "m": v *= 1_000_000
-        elif v < 10_000:         v *= 1_000
-        if 50_000 < v < 10_000_000:
-            result["budget"] = v
-            break
+        if suffix.lower() == "k":
+            v *= 1_000
+        elif suffix.lower() == "m":
+            v *= 1_000_000
+        elif v < 10_000:
+            v *= 1_000
+        return v if 50_000 < v < 10_000_000 else None
+
+    # Prefer values in explicit budget context.
+    budget_context = re.search(
+        r"(?:under|below|max(?:imum)?|up\s*to|budget(?:\s*of)?|around)\s*\$?\s*([\d,]+)\s*([kKmM]?)\b",
+        t,
+        re.IGNORECASE,
+    )
+    if budget_context:
+        parsed = _normalize_budget(budget_context.group(1), budget_context.group(2))
+        if parsed is not None:
+            result["budget"] = parsed
+    else:
+        bm = re.findall(r"\$?\s*([\d,]+)\s*([kKmM]?)\b", t)
+        for raw, suf in bm:
+            raw_clean = raw.replace(",", "")
+            if result.get("zip_code") and raw_clean == result["zip_code"] and suf == "":
+                continue
+            parsed = _normalize_budget(raw, suf)
+            if parsed is not None:
+                result["budget"] = parsed
+                break
 
     # Min beds
     bm2 = re.search(r"(\d)\s*(?:\+\s*)?(?:bed|br|bedroom|bdrm)", t, re.I)

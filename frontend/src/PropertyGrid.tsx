@@ -35,6 +35,13 @@ const domIcon  = (d:number) => d<14?"🔥":d<30?"⏱️":"🐌";
 const cfIcon   = (v:number) => v>400?"💎":v>200?"💚":v>0?"🟡":"🔴";
 const capIcon  = (v:number) => v>=6?"🚀":v>=4.5?"📈":"📉";
 
+function qualityInfo(score:number) {
+  if (score >= 85) return { color:"var(--grn)", bg:"rgba(34,197,94,.11)", bd:"rgba(34,197,94,.26)" };
+  if (score >= 70) return { color:"var(--pri-hi)", bg:"rgba(79,158,255,.11)", bd:"rgba(79,158,255,.26)" };
+  if (score >= 55) return { color:"var(--amb)", bg:"rgba(245,158,11,.11)", bd:"rgba(245,158,11,.26)" };
+  return { color:"var(--red)", bg:"rgba(244,63,94,.11)", bd:"rgba(244,63,94,.26)" };
+}
+
 function tagStyle(t:string):React.CSSProperties {
   if (t.includes("Pick")||t.includes("🏆"))  return {background:"rgba(79,158,255,.15)",border:"1px solid rgba(79,158,255,.35)",color:"var(--pri-hi)"};
   if (t.includes("Hot")||t.includes("🔥"))   return {background:"rgba(251,146,60,.14)",border:"1px solid rgba(251,146,60,.35)",color:"var(--amb)"};
@@ -149,6 +156,20 @@ function ScoreBar({ score, color }:{ score:number; color:string }) {
   );
 }
 
+function QualityScorePill({ label, score }:{ label:string; score:number }) {
+  const tone = qualityInfo(score);
+  return (
+    <div style={{
+      display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",
+      padding:"5px 7px",borderRadius:"8px",background:tone.bg,border:`1px solid ${tone.bd}`,
+      minWidth:0,
+    }}>
+      <span style={{fontSize:"9px",fontWeight:700,color:"var(--t3)",letterSpacing:".02em"}}>{label}</span>
+      <span style={{fontSize:"11px",fontWeight:800,color:tone.color,fontFamily:"'JetBrains Mono',monospace"}}>{score}</span>
+    </div>
+  );
+}
+
 // ── Single property card ───────────────────────────────────────
 function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void; selected:boolean }) {
   const [showMap, setShowMap] = useState(false);
@@ -160,6 +181,9 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
   const cfC = cfColor(p.cash_flow);
   const crC = capColor(p.cap_rate);
   const isRight = (p.rank % 5) >= 3; // cols 4,5 → tooltip opens left
+  const groundedness = p.groundedness_score ?? 0;
+  const correctness  = p.correctness_score ?? 0;
+  const confidence   = p.confidence_score ?? 0;
 
   return (
     <div
@@ -248,6 +272,12 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
         {/* ── Row 4: Score bar ── */}
         <div style={{marginBottom:"9px"}}>
           <ScoreBar score={p.ai_score} color={scoreCol}/>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"10px"}}>
+          <QualityScorePill label="Grounded" score={groundedness}/>
+          <QualityScorePill label="Correct" score={correctness}/>
+          <QualityScorePill label="Conf" score={confidence}/>
         </div>
 
         {/* ── Row 5: Sqft + action buttons ── */}

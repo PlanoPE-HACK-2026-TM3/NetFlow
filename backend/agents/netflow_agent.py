@@ -59,6 +59,7 @@ OBSERVABILITY
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import logging
@@ -75,12 +76,29 @@ from tenacity import (
 
 from backend.config import (
     OLLAMA_BASE_URL, OLLAMA_MODEL, DEMO_MODE,
-    LANGCHAIN_API_KEY,
+    LANGCHAIN_API_KEY, USE_OLLAMA_OVERRIDE,
 )
 
 try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
+
+try:
+    from langsmith import Client as LangSmithClient
+    from langsmith.run_helpers import get_current_run_tree
+    _LS_FEEDBACK_AVAILABLE = True
+except Exception:
+    LangSmithClient = None
+    get_current_run_tree = None
+    _LS_FEEDBACK_AVAILABLE = False
+
+try:
     from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+    from langchain_core.output_parsers import StrOutputParser
     from langchain_ollama import ChatOllama
     _LC_AVAILABLE = True
 except ImportError:
@@ -121,6 +139,9 @@ class ScoredProperty(BaseModel):
     strategy_note: str   = ""   # why this property fits the strategy
     risk_level:    str   = ""   # LOW / MEDIUM / HIGH
     risk_factors:  list[str] = Field(default_factory=list)
+    groundedness_score: int = Field(default=0, ge=0, le=100)
+    correctness_score:  int = Field(default=0, ge=0, le=100)
+    confidence_score:   int = Field(default=0, ge=0, le=100)
 
 
 @dataclass
@@ -332,15 +353,50 @@ def compute_financials(listing: dict, mortgage_rate: float) -> dict:
 
 
 def compact_for_llm(prop: dict) -> dict:
-    """6-field compact payload — positional only, no idx field sent to LLM."""
+    """4-field ultra-compact payload — minimal fields needed by scorer rubric."""
     return {
-        "cap_rate":  round(prop.get("cap_rate",  0), 2),
-        "cash_flow": int(prop.get("cash_flow", 0)),
-        "grm":       round(prop.get("grm",      0), 1),
-        "dom":       int(prop.get("dom",        30)),
-        "beds":      int(prop.get("beds",       3)),
-        "price":     int(prop.get("price",      0)),
+        "c":  round(prop.get("cap_rate",  0), 2),
+        "cf": int(prop.get("cash_flow", 0)),
+        "g":  round(prop.get("grm",      0), 1),
+        "d":  int(prop.get("dom",        30)),
     }
+
+
+SCORER_TAGS = [
+    "Cash+", "High cap", "Hot deal", "Value-add", "Low DOM", "High yield", "Neg CF"
+]
+
+
+def _decode_llm_tags(raw_tags: object) -> list[str]:
+    """Accept tag IDs or strings from LLM and normalize to canonical tag labels."""
+    if not isinstance(raw_tags, list):
+        return []
+
+    tags: list[str] = []
+    for item in raw_tags:
+        if isinstance(item, int) and 0 <= item < len(SCORER_TAGS):
+            tags.append(SCORER_TAGS[item])
+            continue
+
+        if isinstance(item, str):
+            if item.isdigit():
+                idx = int(item)
+                if 0 <= idx < len(SCORER_TAGS):
+                    tags.append(SCORER_TAGS[idx])
+                    continue
+            tags.append(item)
+
+    # Preserve order, dedupe, max 2
+    seen = set()
+    out: list[str] = []
+    for t in tags:
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+        if len(out) >= 2:
+            break
+    return out
 
 
 # ── Risk tools ────────────────────────────────────────────────
@@ -391,26 +447,273 @@ def compute_risk_score(prop: dict) -> tuple[int, list[str], list[str]]:
     return min(score, 100), factors, mitigations, risk_level
 
 
+def compute_quality_scores(
+    prop: dict,
+    strategy: str,
+    risk_score: int | None = None,
+) -> tuple[int, int, int]:
+    """
+    Derive lightweight trust signals for UI and traces.
+
+    groundedness: how much of the output is anchored in concrete listing/financial data
+    correctness: how closely the final score aligns with the deterministic scoring rubric
+    confidence: blended trust signal using groundedness, correctness, and risk
+    """
+    required_fields = [
+        "price", "est_rent", "cap_rate", "cash_flow", "grm",
+        "dom", "beds", "baths", "sqft",
+    ]
+    optional_fields = ["year_built", "lot_size"]
+
+    present_required = sum(
+        1 for field in required_fields
+        if prop.get(field) not in (None, "", 0)
+    )
+    present_optional = sum(
+        1 for field in optional_fields
+        if prop.get(field) not in (None, "", 0)
+    )
+    groundedness = int(round(
+        70 * (present_required / len(required_fields)) +
+        30 * (present_optional / len(optional_fields))
+    ))
+
+    baseline_score, _ = _rule_based_score_fn(prop, strategy)
+    score_delta = abs(int(prop.get("ai_score", baseline_score)) - baseline_score)
+    correctness = max(45, 100 - min(55, score_delta * 3))
+
+    if prop.get("cash_flow", 0) < 0 and prop.get("ai_score", 0) > 70:
+        correctness = max(25, correctness - 20)
+    if prop.get("cap_rate", 0) < 4 and prop.get("ai_score", 0) > 75:
+        correctness = max(25, correctness - 15)
+
+    risk_penalty = min(40, max(0, risk_score or 0) // 2)
+    confidence = int(round(0.4 * groundedness + 0.35 * correctness + 0.25 * (100 - risk_penalty)))
+    confidence = max(0, min(100, confidence))
+
+    return groundedness, correctness, confidence
+
+
+def _metric_distribution(values: list[float]) -> dict[str, float]:
+    """Return compact percentile stats for observability payloads."""
+    if not values:
+        return {"min": 0.0, "p50": 0.0, "p90": 0.0, "max": 0.0}
+    s = sorted(values)
+
+    def _pct(p: float) -> float:
+        idx = min(len(s) - 1, max(0, int(round((len(s) - 1) * p))))
+        return round(float(s[idx]), 2)
+
+    return {
+        "min": round(float(s[0]), 2),
+        "p50": _pct(0.50),
+        "p90": _pct(0.90),
+        "max": round(float(s[-1]), 2),
+    }
+
+
+def estimate_demo_tokens(num_properties: int, tool_calls: int) -> dict[str, int]:
+    """
+    Deterministic token estimate for DEMO/rule-fallback mode.
+    Used for observability dashboards when no provider-reported usage exists.
+    """
+    # Calibrated to reflect compact prompts/payloads while staying realistic.
+    prompt_tokens = int(90 + num_properties * 16 + tool_calls * 4)
+    completion_tokens = int(40 + num_properties * 10)
+    total_tokens = prompt_tokens + completion_tokens
+    return {
+        "estimated_prompt_tokens": prompt_tokens,
+        "estimated_completion_tokens": completion_tokens,
+        "estimated_total_tokens": total_tokens,
+    }
+
+
+def emit_quality_feedback_to_langsmith(
+    scored: list[ScoredProperty],
+    strategy: str,
+    demo_mode: bool,
+    llm_available: bool,
+    run_id: str | None = None,
+    request_id: str | None = None,
+    stage_times: dict[str, float] | None = None,
+    token_usage: dict[str, int] | None = None,
+    fallback_used: dict[str, bool] | None = None,
+) -> None:
+    """
+    Publish aggregate trust metrics to LangSmith feedback on the current run.
+    This keeps evaluator signals in observability instead of user-facing UI.
+    """
+    if not scored:
+        log.debug("LangSmith feedback skipped: empty scored list")
+        return
+    if not _LS_FEEDBACK_AVAILABLE:
+        log.warning("LangSmith feedback skipped: langsmith client unavailable")
+        return
+    if not LANGCHAIN_API_KEY:
+        log.warning("LangSmith feedback skipped: LANGCHAIN_API_KEY missing")
+        return
+    try:
+        run_ids: list[str] = []
+
+        parent_run_id = (run_id or "").strip()
+        if parent_run_id:
+            run_ids.append(parent_run_id)
+
+        run_tree = get_current_run_tree() if get_current_run_tree else None
+        current_run_id = str(getattr(run_tree, "id", "") or "").strip()
+        if current_run_id and current_run_id not in run_ids:
+            run_ids.append(current_run_id)
+
+        if not run_ids:
+            log.warning("LangSmith feedback skipped: no run_id available")
+            return
+
+        n = len(scored)
+        avg_grounded = round(sum(p.groundedness_score for p in scored) / n, 2)
+        avg_correct = round(sum(p.correctness_score for p in scored) / n, 2)
+        avg_conf = round(sum(p.confidence_score for p in scored) / n, 2)
+        dist_grounded = _metric_distribution([p.groundedness_score for p in scored])
+        dist_correct = _metric_distribution([p.correctness_score for p in scored])
+        dist_conf = _metric_distribution([p.confidence_score for p in scored])
+
+        client = LangSmithClient()
+
+        sent = 0
+
+        def _send_feedback(**kwargs) -> None:
+            """Send one feedback item to all resolved run IDs without blocking on failure."""
+            nonlocal sent
+            key = kwargs.get("key", "unknown")
+            for rid in run_ids:
+                try:
+                    client.create_feedback(run_id=rid, **kwargs)
+                    sent += 1
+                except Exception as item_exc:
+                    log.warning(
+                        "LangSmith feedback item failed | run_id=%s | key=%s | err=%s",
+                        rid,
+                        key,
+                        item_exc,
+                    )
+
+        common = {
+            "source_info": {
+                "request_id": request_id or "",
+                "strategy": strategy,
+                "demo_mode": demo_mode,
+                "llm_available": llm_available,
+                "sample_size": n,
+                "stage_times": stage_times or {},
+                "token_usage": token_usage or {},
+                "fallback_used": fallback_used or {},
+            }
+        }
+
+        def _score_0_1(percent: float) -> float:
+            # LangSmith feedback API accepts score precision up to 4 decimals.
+            return round(float(percent) / 100.0, 4)
+
+        _send_feedback(
+            key="groundedness",
+            score=_score_0_1(avg_grounded),
+            value={
+                "avg_percent": avg_grounded,
+                "definition": (
+                    "Degree to which conclusions are explicitly supported by retrieved listing facts "
+                    "and deterministic financial calculations (not free-form assumptions)."
+                ),
+                "interpretation": {
+                    "high_80_100": "Strong evidence grounding; low hallucination risk.",
+                    "mid_60_79": "Mostly grounded with minor inferred reasoning.",
+                    "low_0_59": "Weak grounding; review data coverage and prompts.",
+                },
+                "distribution": dist_grounded,
+            },
+            comment=(
+                f"Average groundedness across {n} properties. "
+                "Measures factual anchoring to observed inputs and computed metrics."
+            ),
+            **common,
+        )
+        _send_feedback(
+            key="correctness",
+            score=_score_0_1(avg_correct),
+            value={
+                "avg_percent": avg_correct,
+                "definition": (
+                    "Consistency between model/reranked outcomes and the deterministic rubric baseline "
+                    "plus financial sanity checks (cash flow, cap-rate, risk constraints)."
+                ),
+                "interpretation": {
+                    "high_80_100": "Outputs agree with baseline and constraints.",
+                    "mid_60_79": "Acceptable deviation for qualitative ranking adjustments.",
+                    "low_0_59": "Material divergence; investigate scoring logic or prompt drift.",
+                },
+                "distribution": dist_correct,
+            },
+            comment=(
+                f"Average correctness across {n} properties. "
+                "Captures agreement with deterministic scoring expectations."
+            ),
+            **common,
+        )
+        _send_feedback(
+            key="confidence",
+            score=_score_0_1(avg_conf),
+            value={
+                "avg_percent": avg_conf,
+                "definition": (
+                    "Calibrated trust indicator combining groundedness, correctness, and risk penalty. "
+                    "This is a pipeline reliability signal, not a probability of return."
+                ),
+                "interpretation": {
+                    "high_80_100": "High trust in pipeline output quality for this run.",
+                    "mid_60_79": "Moderate trust; acceptable with human review.",
+                    "low_0_59": "Low trust; verify data quality and fallback conditions.",
+                },
+                "distribution": dist_conf,
+            },
+            comment=(
+                f"Average confidence across {n} properties. "
+                "Composite reliability score for the run-level decision output."
+            ),
+            **common,
+        )
+
+        if token_usage:
+            _send_feedback(
+                key="token_usage_estimate",
+                value={
+                    "mode": "estimated_demo" if demo_mode else "estimated",
+                    "prompt_tokens": int(token_usage.get("estimated_prompt_tokens", 0)),
+                    "completion_tokens": int(token_usage.get("estimated_completion_tokens", 0)),
+                    "total_tokens": int(token_usage.get("estimated_total_tokens", 0)),
+                },
+                comment="Estimated token usage for this run (demo fallback, not provider-reported).",
+                **common,
+            )
+
+        log.info(
+            "LangSmith feedback sent | run_ids=%s | items=%d | strategy=%s | request_id=%s",
+            run_ids,
+            sent,
+            strategy,
+            request_id,
+        )
+    except Exception as exc:
+        log.warning("LangSmith feedback publish skipped: %s", exc)
+
+
 # ══════════════════════════════════════════════════════════════
 # 4.  LLM PROMPT TEMPLATES
 # ══════════════════════════════════════════════════════════════
 
 # Agent 2 — Scorer: compact batch scoring
-SCORING_SYSTEM = """You are a real estate investment scoring engine.
-Score each property 0-100. Return results IN THE SAME ORDER as the input array.
-
-Rubric: cap_rate*30 + cash_flow*25 + grm*15 + dom*10 + strategy_fit*20
-Bands:
-  cap_rate  >6=90  5-6=75  4-5=55  <4=30
-  cash_flow >400=100  200-400=75  0-200=40  <0=0
-  grm       <100=100  100-130=70  130-160=40  >160=10
-  dom       <14d=100  <30d=65  <60d=30  >=60d=0
-Strategy bonus +8 pts: LTR if CF>200, STR if cap>5.5, BRRRR if dom>40, Flip if dom<20
-Tags (pick 1-2): Cash+, High cap, Hot deal, Value-add, Low DOM, High yield, Neg CF
-
-Return ONLY a JSON array, one object per input property, same order as input:
-[{{"ai_score": 85, "tags": ["Cash+", "High cap"]}}, {{"ai_score": 72, "tags": ["Low DOM"]}}, ...]
-No explanation. No markdown fences. Just the raw JSON array."""
+SCORING_SYSTEM = """Score properties 0-100. c*30 + cf*25 + g*15 + d*10 + strategy*20.
+c: >6→90, 5-6→75, 4-5→55, <4→30.  cf: >400→100, 200-400→75, 0-200→40, <0→0.  g: <100→100, 100-130→70, 130-160→40, >160→10.  d: <14→100, <30→65, <60→30, ≥60→0.
+Strategy: LTR cf>200 +8, STR c>5.5 +8, BRRRR d>40 +8, Flip d<20 +8.
+Tag IDs: 0=Cash+,1=High cap,2=Hot deal,3=Value-add,4=Low DOM,5=High yield,6=Neg CF.
+Return ONLY valid JSON, same order, each object with keys score and t where t is a list of tag IDs. No explanation/markdown."""
 
 SCORING_HUMAN = "Strategy: {strategy} | Mortgage rate: {rate}%\nProperties:\n{data}"
 
@@ -426,35 +729,22 @@ STRATEGY_LABELS_LONG = {
 
 # Agent 3 — Risk advisor: property risk memo
 RISK_MEMO_SYSTEM = """\
-You are a cautious real estate risk analyst. Given a property's risk factors and financials,
-write a concise 2-sentence risk memo that a prudent investor should read before making an offer.
-Be specific. Use the numbers. Do not repeat the factors verbatim — synthesise them.
-Format: Plain text, 2 sentences, max 60 words total.\
+2-sentence risk memo for real estate investor. Be specific, use numbers, max 50 words. Plain text only.\
 """
 
 RISK_MEMO_HUMAN = """\
-Property: {address}
-Price: ${price:,} | Beds: {beds} | Year built: {year_built}
-Cap rate: {cap_rate}% | Cash flow: ${cash_flow}/mo | GRM: {grm}x | DOM: {dom}d
-Risk score: {risk_score}/100 ({risk_level})
-Risk factors: {factors}
-Suggested mitigations: {mitigations}\
+{address} | ${price:,} | {beds}bd | {year_built} | cap {cap_rate}% | CF ${cash_flow}/mo | GRM {grm}x | DOM {dom}d | Risk: {risk_level}
+Factors: {factors} | Mitigations: {mitigations}\
 """
 
 # Agent 1 — Market Analyst: narrative
-MARKET_SUMMARY_SYSTEM = """\
-You are a concise real estate market analyst. Max 90 words.
-Be data-driven, specific, and actionable. No generic filler.\
-"""
+MARKET_SUMMARY_SYSTEM = "Concise real estate market summary, max 60 words. Numbers only, no filler."
 
 MARKET_SUMMARY_HUMAN = """\
-ZIP: {zip_code} | Budget: ${budget:,} | Strategy: {strategy_label} | Rate: {mortgage_rate}%
-Top pick: {top1_addr} — ${top1_price:,} | cap {top1_cap}% | CF ${top1_cf}/mo | score {top1_score}/100
-Portfolio avg: cap {avg_cap}% | CF ${avg_cf}/mo across {n_props} properties
-Market: avg rent ${avg_rent}/mo | DOM avg {avg_dom}d | vacancy {vacancy}% | rent growth {rent_growth}%/yr
-Pipeline: {pipeline_note}
-
-Write 2-3 sentences: market outlook with live data, top pick recommendation with numbers, one risk to watch.\
+ZIP {zip_code} | {strategy_label} | Rate {mortgage_rate}% | Budget ${budget:,}
+Top: {top1_addr} ${top1_price:,} cap {top1_cap}% CF ${top1_cf}/mo score {top1_score}
+Avg cap {avg_cap}% CF ${avg_cf}/mo | Rent ${avg_rent}/mo DOM {avg_dom}d
+2 sentences: outlook + top pick.\
 """
 
 STRATEGY_LABELS = {
@@ -580,9 +870,15 @@ class MarketAnalystAgent:
                 ("system", MARKET_SUMMARY_SYSTEM),
                 ("human",  MARKET_SUMMARY_HUMAN),
             ])
-            chain = prompt | llm | StrOutputParser()
+            # Cap summary at 72 tokens — 2 short sentences fit comfortably
+            summary_llm = llm.bind(num_predict=72, temperature=0.1)
+            chain = prompt | summary_llm | StrOutputParser()
+            char_count = 0
             async for chunk in chain.astream(template_vars):
+                char_count += len(chunk)
                 yield chunk
+            # ~0.75 chars/token rough estimate for tracking
+            ctx.token_usage["market_summary"] = int(char_count / 0.75) + 55
         except Exception as e:
             log.warning("Narrative LLM failed: %s", e)
             for word in _rule_summary(ctx, budget, strategy, top_picks).split(" "):
@@ -657,15 +953,26 @@ class PropertyScorerAgent:
             ("system", SCORING_SYSTEM),
             ("human",  SCORING_HUMAN),
         ])
-        chain = prompt | llm | JsonOutputParser()
+        scorer_llm = llm.bind(num_predict=260, temperature=0.1)
+        chain = prompt | scorer_llm | StrOutputParser()
 
         try:
-            raw = await chain.ainvoke({
+            raw_text = await chain.ainvoke({
                 "strategy": ctx.strategy,
                 "rate":     rate,
-                "data":     json.dumps(compact),
+                "data":     json.dumps(compact, separators=(",", ":")),
             })
-            ctx.token_usage["llm_score"] = len(compact) * 20 + 140
+            
+            # Try to parse as JSON, handling unquoted keys gracefully
+            try:
+                raw = json.loads(raw_text)
+            except json.JSONDecodeError:
+                # Try using ast.literal_eval for Python-like syntax
+                raw = ast.literal_eval(raw_text)
+            
+            # Prompt ≈ 60 tokens + 4 fields×10 props×~2 tokens each = ~140.
+            # Completion ≈ 2 fields×10 items×~2 tokens each = ~40.
+            ctx.token_usage["llm_score"] = len(compact) * 18 + 80
             log_scorer.debug(
                 "LLM batch score | n=%d strategy=%s est_tokens=%d",
                 len(compact), ctx.strategy, ctx.token_usage["llm_score"],
@@ -681,10 +988,13 @@ class PropertyScorerAgent:
                 info = raw[i] if i < len(raw) else {}
                 if not isinstance(info, dict):
                     info = {}
+                # Support short and long formats for backward compatibility.
+                score_val = info.get("score", info.get("s", info.get("ai_score", 50)))
+                tags_val = info.get("t", info.get("tags", []))
                 results.append({
                     **prop,
-                    "ai_score": max(0, min(100, int(info.get("ai_score", 50)))),
-                    "tags":     [str(t) for t in info.get("tags", [])][:2],
+                    "ai_score": max(0, min(100, int(score_val))),
+                    "tags":     _decode_llm_tags(tags_val),
                 })
 
             # Guarantee 10 items if LLM returned fewer
@@ -773,13 +1083,18 @@ class PropertyScorerAgent:
         """
         # Fields allowed by the Pydantic model (excludes rank — set explicitly)
         ALLOWED = set(ScoredProperty.model_fields.keys()) - {"rank", "tags",
-                       "strategy_note", "risk_level", "risk_factors"}
+                   "strategy_note", "risk_level", "risk_factors",
+                   "groundedness_score", "correctness_score", "confidence_score"}
 
         results = []
         for i, prop in enumerate(ctx.scored):
             risk       = ctx.risk_profiles.get(prop.get("address", ""))
+            risk_score = risk.score if risk else 0
             risk_flags = risk.factors[:1] if risk else []
             all_tags   = (prop.get("tags") or [])[:2] + risk_flags
+            groundedness, correctness, confidence = compute_quality_scores(
+                prop, ctx.strategy, risk_score=risk_score
+            )
             try:
                 safe = {k: v for k, v in prop.items() if k in ALLOWED}
                 sp = ScoredProperty(
@@ -788,6 +1103,9 @@ class PropertyScorerAgent:
                     strategy_note = prop.get("strategy_note", ""),
                     risk_level    = risk.overall_risk if risk else "",
                     risk_factors  = risk.factors if risk else [],
+                    groundedness_score = groundedness,
+                    correctness_score  = correctness,
+                    confidence_score   = confidence,
                     **safe,
                 )
             except Exception as e:
@@ -801,6 +1119,9 @@ class PropertyScorerAgent:
                     strategy_note= "",
                     risk_level   = risk.overall_risk if risk else "",
                     risk_factors = risk.factors if risk else [],
+                    groundedness_score = groundedness,
+                    correctness_score  = correctness,
+                    confidence_score   = confidence,
                     **{k: v for k, v in safe.items() if k != "ai_score"},
                 )
             results.append(sp)
@@ -855,7 +1176,8 @@ class RiskAdvisorAgent:
                 memo         = _rule_risk_memo(factors, mitigations),
             )
             profiles[prop["address"]] = profile
-            if level == "HIGH" and ctx.llm_available and not DEMO_MODE:
+            # Use LLM for high-risk memos unless in DEMO mode without override
+            if level == "HIGH" and ctx.llm_available and ((not DEMO_MODE) or USE_OLLAMA_OVERRIDE):
                 high_risk_props.append((prop, profile))
 
         ctx.record_tool("compute_risk_scores",
@@ -890,7 +1212,9 @@ class RiskAdvisorAgent:
             ("system", RISK_MEMO_SYSTEM),
             ("human",  RISK_MEMO_HUMAN),
         ])
-        chain = prompt | llm | StrOutputParser()
+        # 50 words max per memo ≈ 55 completion tokens; prompt ~40
+        risk_llm = llm.bind(num_predict=55, temperature=0.1)
+        chain = prompt | risk_llm | StrOutputParser()
 
         async def _gen_one(prop: dict, profile: RiskProfile) -> None:
             try:
@@ -909,7 +1233,8 @@ class RiskAdvisorAgent:
                     "mitigations":"; ".join(profile.mitigations) or "None",
                 })
                 profile.memo = memo.strip()
-                ctx.token_usage["risk_memos"] = ctx.token_usage.get("risk_memos", 0) + 80
+                # ~55 completion + ~40 prompt per HIGH-risk property
+                ctx.token_usage["risk_memos"] = ctx.token_usage.get("risk_memos", 0) + 95
                 ctx.record_tool("generate_risk_memo",
                                 {"address": prop.get("address","")},
                                 "ok", 0.0)
@@ -953,7 +1278,8 @@ class NetFlowAgent:
                 model       = OLLAMA_MODEL,
                 temperature = 0.1,
                 base_url    = OLLAMA_BASE_URL,
-                num_predict = 350,
+                # Global ceiling; per-stage tighter caps are applied via llm.bind(...)
+                num_predict = 220,
             )
         return self._llm
 
@@ -980,6 +1306,8 @@ class NetFlowAgent:
         strategy:      str,
         fred_service   = None,
         rentcast_service = None,
+        trace_run_id: str | None = None,
+        request_id: str | None = None,
     ) -> list[ScoredProperty]:
         """
         Full agent pipeline:
@@ -997,7 +1325,9 @@ class NetFlowAgent:
         )
 
         # ── Gate: check LLM availability once (async, TTL-cached) ─
-        ctx.llm_available = (not DEMO_MODE) and await self._check_ollama()
+        # Allow Ollama override even in DEMO mode if USE_OLLAMA_OVERRIDE=true
+        should_check_llm = (not DEMO_MODE) or USE_OLLAMA_OVERRIDE
+        ctx.llm_available = should_check_llm and await self._check_ollama()
         if not ctx.llm_available:
             log.warning("Ollama offline — all LLM stages will use rule-based fallback")
 
@@ -1046,7 +1376,8 @@ class NetFlowAgent:
         scorer_ctx.errors      = ctx.errors
 
         # Skip re-enrichment in scorer (already done above)
-        if ctx.llm_available and not DEMO_MODE:
+        # Use LLM unless in DEMO mode without override
+        if ctx.llm_available and ((not DEMO_MODE) or USE_OLLAMA_OVERRIDE):
             scored_raw            = await self._scorer_agent._llm_score_batch(scorer_ctx, mortgage_rate, llm)
             reranked              = self._scorer_agent._rule_strategy_rerank(scorer_ctx, scored_raw)
             scorer_ctx.scored     = reranked
@@ -1059,10 +1390,31 @@ class NetFlowAgent:
 
         # ── Log full pipeline trace ────────────────────────────
         total = sum(ctx.stage_times.values())
+
+        # In DEMO/fallback paths there is no provider token usage; expose deterministic estimates.
+        if not ctx.token_usage:
+            ctx.token_usage.update(estimate_demo_tokens(len(listings), len(ctx.tool_trace)))
+
+        token_total = sum(
+            v for k, v in ctx.token_usage.items()
+            if isinstance(v, int) and k != "estimated_prompt_tokens" and k != "estimated_completion_tokens"
+        )
         log.info(
-            "Pipeline done | %d props | %.2fs | tools=%d | fallback=%s | tokens=%s",
+            "Pipeline done | %d props | %.2fs | tools=%d | fallback=%s | tokens=%s | total_est=%d",
             len(final), total, len(ctx.tool_trace),
-            ctx.fallback_used, ctx.token_usage,
+            ctx.fallback_used, ctx.token_usage, token_total,
+        )
+
+        emit_quality_feedback_to_langsmith(
+            scored=final,
+            strategy=strategy,
+            demo_mode=DEMO_MODE,
+            llm_available=ctx.llm_available,
+            run_id=trace_run_id,
+            request_id=request_id,
+            stage_times=ctx.stage_times,
+            token_usage=ctx.token_usage,
+            fallback_used=ctx.fallback_used,
         )
         return final
 

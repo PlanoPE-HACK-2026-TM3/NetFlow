@@ -32,9 +32,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+try:
+    from langsmith import traceable
+except Exception:
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
+
+try:
+    from langsmith.run_helpers import get_current_run_tree
+except Exception:
+    get_current_run_tree = None
+
 # ── Configure logging FIRST — before any other netflow import ──
 from backend.logger import configure_logging
-from backend.config import ALLOWED_ORIGINS, DEMO_MODE, DEBUG_MODE, RENTCAST_API_KEY, FRED_API_KEY, LANGCHAIN_API_KEY
+from backend.config import ALLOWED_ORIGINS, DEMO_MODE, DEBUG_MODE, RENTCAST_API_KEY, FRED_API_KEY, LANGCHAIN_API_KEY, OLLAMA_MODEL
 
 _debug_active = configure_logging(debug=DEBUG_MODE)
 
@@ -116,15 +129,38 @@ def parse_prompt_to_params(text: str) -> dict:
 
     # ── Budget ────────────────────────────────────────────────
     budget = 450000
-    b_candidates = re.findall(r"\$?([\d,]+)\s*([kKmM]?)\b", t)
-    for raw, suffix in b_candidates:
+
+    def _normalize_budget(raw: str, suffix: str) -> int | None:
         val = int(raw.replace(",", ""))
-        if suffix.lower() == "k":   val *= 1000
-        elif suffix.lower() == "m": val *= 1_000_000
-        elif val < 10_000:          val *= 1000
-        if 50_000 < val < 10_000_000:
-            budget = val
-            break
+        if suffix.lower() == "k":
+            val *= 1000
+        elif suffix.lower() == "m":
+            val *= 1_000_000
+        elif val < 10_000:
+            val *= 1000
+        return val if 50_000 < val < 10_000_000 else None
+
+    # Prefer values that appear in an explicit budget context.
+    budget_context = re.search(
+        r"(?:under|below|max(?:imum)?|up\s*to|budget(?:\s*of)?|around)\s*\$?\s*([\d,]+)\s*([kKmM]?)\b",
+        t,
+        re.IGNORECASE,
+    )
+    if budget_context:
+        parsed = _normalize_budget(budget_context.group(1), budget_context.group(2))
+        if parsed is not None:
+            budget = parsed
+    else:
+        # Fallback: scan all numeric candidates, but never treat the detected ZIP as budget.
+        b_candidates = re.findall(r"\$?([\d,]+)\s*([kKmM]?)\b", t)
+        for raw, suffix in b_candidates:
+            raw_clean = raw.replace(",", "")
+            if zip_code and raw_clean == zip_code and suffix == "":
+                continue
+            parsed = _normalize_budget(raw, suffix)
+            if parsed is not None:
+                budget = parsed
+                break
 
     # ── Min beds ─────────────────────────────────────────────
     min_beds = 3
@@ -467,8 +503,12 @@ async def parse_prompt_endpoint(req: ParseRequest):
 
 
 @app.post("/api/search/stream")
-async def search_stream(req: SearchRequest):
+async def search_stream(req: SearchRequest, request: Request):
+    @traceable(name="netflow.search_stream_pipeline")
     async def event_generator():
+        req_id = getattr(request.state, "req_id", uuid.uuid4().hex[:8])
+        run_tree = get_current_run_tree() if get_current_run_tree else None
+        parent_run_id = str(getattr(run_tree, "id", "") or "")
         try:
             # ── UserAgent: validate + sanitise + classify ─────
             raw_prompt = req.prompt_text.strip()
@@ -509,7 +549,6 @@ async def search_stream(req: SearchRequest):
             strategy  = p["strategy"]
             loc_disp  = p["location_display"]
 
-            req_id = getattr(getattr(req, "state", None), "req_id", uuid.uuid4().hex[:8])
             log.info("SSE search start | zip=%s budget=%d strategy=%s",
                      zip_code, budget, strategy, extra={"req_id": req_id})
             if _debug_active:
@@ -541,6 +580,8 @@ async def search_stream(req: SearchRequest):
             scored = await agent.score_and_rank(
                 listings, mortgage_rate, strategy,
                 fred_service=fred, rentcast_service=rentcast,
+                trace_run_id=parent_run_id,
+                request_id=req_id,
             )
 
             log.info("SSE properties ready | count=%d zip=%s rate=%.2f%%",
@@ -556,6 +597,7 @@ async def search_stream(req: SearchRequest):
                 "zip_code":         zip_code,
                 "location_display": loc_disp,
                 "demo_mode":        DEMO_MODE,
+                "request_id":       req_id,
             })
 
             yield _sse("ai_start", {})
@@ -591,8 +633,12 @@ async def search_stream(req: SearchRequest):
 
 
 @app.post("/api/search")
+@traceable(name="netflow.search_pipeline")
 async def search_properties(req: SearchRequest):
     try:
+        req_id = uuid.uuid4().hex[:8]
+        run_tree = get_current_run_tree() if get_current_run_tree else None
+        parent_run_id = str(getattr(run_tree, "id", "") or "")
         p = req.resolve()
         mortgage_rate, listings = await asyncio.gather(
             fred.get_30yr_rate(),
@@ -609,6 +655,8 @@ async def search_properties(req: SearchRequest):
         scored  = await agent.score_and_rank(
             listings, mortgage_rate, p["strategy"],
             fred_service=fred, rentcast_service=rentcast,
+            trace_run_id=parent_run_id,
+            request_id=req_id,
         )
         summary = await agent.market_summary(
             zip_code=p["zip_code"], budget=p["budget"], strategy=p["strategy"],
@@ -622,6 +670,7 @@ async def search_properties(req: SearchRequest):
             "location_display": p["location_display"],
             "search_params":  req.model_dump(),
             "demo_mode":      DEMO_MODE,
+            "request_id":     req_id,
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

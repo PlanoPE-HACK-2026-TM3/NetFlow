@@ -31,15 +31,19 @@ export interface Property {
   listing_url?:string;
   map_query?:  string;
   photo_url?:  string;
+  groundedness_score?: number;
+  correctness_score?:  number;
+  confidence_score?:   number;
 }
 
 export interface SearchResult {
   properties:       Property[];
   mortgage_rate:    number;
-  market_summary:   string;
+  market_summary?:  string;
   zip_code:         string;
   location_display: string;
-  search_params:    SearchParams;
+  request_id?:      string;
+  search_params?:   SearchParams;
 }
 
 export interface ParsedPrompt {

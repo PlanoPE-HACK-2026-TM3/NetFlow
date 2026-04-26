@@ -5,13 +5,14 @@
  *   users        — { username, passwordHash, role, createdAt }
  *   loginHistory — { id, username, ts, success, ip? }
  *   searchHistory — { id, username, prompt, params, resultCount, ts }
+ *   appLogs      — { id, ts, level, category, message, meta? }
  *
  * All operations are async. DB auto-creates on first open.
  * No external dependencies — native browser IndexedDB.
  */
 
-const DB_NAME    = "netflow_db";
-const DB_VERSION = 2;
+export const DB_NAME    = "netflow_db";
+export const DB_VERSION = 3;
 
 // ── Simple SHA-256 hash using Web Crypto ─────────────────────
 export async function hashPassword(plain: string): Promise<string> {
@@ -47,6 +48,12 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("favorites")) {
         const fav = db.createObjectStore("favorites", { keyPath: "id", autoIncrement: true });
         fav.createIndex("username", "username", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("appLogs")) {
+        const logs = db.createObjectStore("appLogs", { keyPath: "id", autoIncrement: true });
+        logs.createIndex("category", "category", { unique: false });
+        logs.createIndex("ts",       "ts",       { unique: false });
       }
     };
 
@@ -120,6 +127,9 @@ export interface SearchRecord {
 // ── User management ───────────────────────────────────────────
 
 export async function seedDefaultUser() {
+  // Default credentials are for local/demo use only.
+  if (process.env.NODE_ENV === "production") return;
+
   const db   = await openDB();
   const user = await tx<DBUser | undefined>(db, "users", "readonly", s => s.get("admin"));
   if (!user) {
@@ -129,6 +139,11 @@ export async function seedDefaultUser() {
       role: "admin", createdAt: Date.now(), displayName: "Administrator",
     }));
   }
+  db.close();
+}
+
+export async function initDB() {
+  const db = await openDB();
   db.close();
 }
 
