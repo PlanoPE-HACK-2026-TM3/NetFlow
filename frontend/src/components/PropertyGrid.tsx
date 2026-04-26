@@ -3,6 +3,10 @@ import { useState, memo } from "react";
 import { log } from "@/lib/logger";
 import type { Property } from "@/lib/types";
 
+const API_BASE =
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:8000";
+
 interface Props {
   properties:         Property[];
   onSelectProperty:   (p: Property) => void;
@@ -81,8 +85,26 @@ function Heart({ active, onClick }: { active: boolean; onClick: () => void }) {
 const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavorite, onToggleFavorite }:
   { p: Property; onSelect: (p: Property) => void; selected: boolean; isFavorite: boolean; onToggleFavorite: (p: Property) => void }) {
 
-  const [showMap, setShowMap] = useState(false);
-  const [showMLS, setShowMLS] = useState(false);
+  const [showMap,  setShowMap]  = useState(false);
+  const [showMLS,  setShowMLS]  = useState(false);
+  const [hitlVote, setHitlVote] = useState<"up"|"down"|null>(null);
+
+  const submitVote = async (vote: "up" | "down") => {
+    setHitlVote(vote);
+    log.ui("HITL vote", { address: p.address, vote, score: p.ai_score });
+    try {
+      await fetch(`${API_BASE}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address:        p.address,
+          mls_id:         p.mls_id ?? "",
+          original_score: p.ai_score,
+          vote,
+        }),
+      });
+    } catch (_) { /* non-critical, fire-and-forget */ }
+  };
 
   const [dark, mid, accent] = PALETTES[(p.rank - 1) % 5];
   const { c: scoreC, label: scoreLabel } = scoreInfo(p.ai_score);
@@ -302,7 +324,7 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
         </div>
 
         {/* Score progress bar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
           <div className="score-bar-track" style={{ flex: 1 }}>
             <div className="score-bar-fill"
               style={{ width: `${p.ai_score}%`, background: `linear-gradient(90deg,var(--pri),${scoreC})` }}/>
@@ -315,6 +337,26 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
             {p.ai_score}/100
           </span>
         </div>
+
+        {/* LLM Correctness bar */}
+        {(p.llm_correctness !== undefined) && (() => {
+          const lc    = p.llm_correctness;
+          const lcC   = lc >= 80 ? "#10b981" : lc >= 60 ? "#f59e0b" : "#f43f5e";
+          const lcLbl = lc >= 80 ? "High" : lc >= 60 ? "Med" : "Low";
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+              <span style={{ fontSize: 9, fontWeight: 600, color: "var(--t3)", minWidth: 60 }}>
+                LLM Conf.
+              </span>
+              <div style={{ flex: 1, height: 3, background: "var(--bg-raise)", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${lc}%`, background: lcC, borderRadius: 2, transition: "width 0.4s" }}/>
+              </div>
+              <span style={{ fontSize: 9, color: lcC, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", minWidth: 34, textAlign: "right" }}>
+                {lcLbl} {lc}%
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Tags */}
         {p.tags.length > 0 && (
@@ -338,6 +380,35 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
             })}
           </div>
         )}
+
+        {/* HITL — human-in-the-loop feedback row */}
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, paddingTop: 8, borderTop: "1px solid var(--bd)" }}
+          onClick={e => e.stopPropagation()}>
+          {hitlVote ? (
+            <span style={{ fontSize: 11, color: "#10b981", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth={2.5} strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              {hitlVote === "up" ? "Marked helpful" : "Feedback recorded"}
+            </span>
+          ) : (
+            <>
+              <span style={{ fontSize: 10, color: "var(--t3)", flex: 1, fontWeight: 500 }}>Was this ranking helpful?</span>
+              {(["up", "down"] as const).map(v => (
+                <button key={v} onClick={() => submitVote(v)} title={v === "up" ? "Thumbs up" : "Thumbs down"}
+                  style={{
+                    width: 28, height: 28, borderRadius: 7, border: "1px solid var(--bd)",
+                    background: "var(--bg-raise)", cursor: "pointer", fontSize: 14,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = v === "up" ? "#10b981" : "#f43f5e"; (e.currentTarget as HTMLElement).style.background = v === "up" ? "rgba(16,185,129,.10)" : "rgba(244,63,94,.10)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--bd)"; (e.currentTarget as HTMLElement).style.background = "var(--bg-raise)"; }}>
+                  {v === "up" ? "👍" : "👎"}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
 
         {/* Action buttons */}
         <div

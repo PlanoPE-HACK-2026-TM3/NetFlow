@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { log } from "@/lib/logger";
 import type { SearchParams, ParsedPrompt } from "@/lib/types";
 import type { SearchRecord } from "@/lib/db";
 import { silentCorrect } from "@/lib/spellCorrect";
@@ -30,6 +29,26 @@ const STRATEGIES = [
 ] as const;
 
 
+// ── Synchronously extract budget from prompt text ─────────────
+// Mirrors backend parse_prompt_to_params budget logic so the frontend
+// doesn't depend on the debounced /api/parse-prompt response.
+function parseBudgetFromText(text: string): number | null {
+  const t = text.toLowerCase().replace(/,/g, "");
+  // $300k  or  $300K
+  let m = t.match(/\$(\d+(?:\.\d+)?)k\b/);
+  if (m) return Math.round(parseFloat(m[1]) * 1000);
+  // under/below/max/budget 300k
+  m = t.match(/(?:under|below|max|budget|up\s+to)[^$\d]*\$?(\d+(?:\.\d+)?)k\b/);
+  if (m) return Math.round(parseFloat(m[1]) * 1000);
+  // $300000  (5+ digit dollar amount)
+  m = t.match(/\$(\d{5,})/);
+  if (m) return parseInt(m[1]);
+  // under/below/max/budget $300000
+  m = t.match(/(?:under|below|max|budget|up\s+to)[^$\d]*\$?(\d{5,})/);
+  if (m) return parseInt(m[1]);
+  return null;
+}
+
 // ── In-memory search cache (session, 15min TTL) ───────────────
 const _cache = new Map<string, { result: unknown; ts: number }>();
 const CACHE_TTL = 15 * 60 * 1000;
@@ -55,13 +74,9 @@ declare global {
     continuous: boolean; interimResults: boolean; lang: string;
     start(): void; stop(): void;
     onresult: ((e: SpeechRecognitionEvent) => void) | null;
-    onerror:  ((e: SpeechRecognitionErrorEvent) => void) | null;
+    onerror:  ((e: Event) => void) | null;
     onend:    (() => void) | null;
   }
-  interface SpeechRecognitionEvent extends Event {
-    results: SpeechRecognitionResultList;
-  }
-  interface SpeechRecognitionErrorEvent extends Event { error: string; }
 }
 
 interface Props {
@@ -99,7 +114,6 @@ const chip = (on:boolean): React.CSSProperties => ({
 export default function SearchPanel({ onSearch, loading, statusMsg, searchHistory, onHistorySelect }: Props) {
   const [prompt,     setPrompt]     = useState("");
   const [parsed,     setParsed]     = useState<ParsedPrompt | null>(null);
-  const [parsing,    setParsing]    = useState(false);
 
   // Voice
   const [listening,  setListening]  = useState(false);
@@ -148,16 +162,15 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
     parseAbort.current?.abort();
     const ctrl = new AbortController();
     parseAbort.current = ctrl;
-    setParsing(true);
     try {
       const res = await fetch(`${API_BASE}/api/parse-prompt`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ prompt: text }),
         signal: ctrl.signal,
       });
-      if (!ctrl.signal.aborted) { setParsed(await res.json()); setParsing(false); }
+      if (!ctrl.signal.aborted) { setParsed(await res.json()); }
     } catch(e) {
-      if ((e as Error).name !== "AbortError") { setParsed(null); setParsing(false); }
+      if ((e as Error).name !== "AbortError") { setParsed(null); }
     }
   }, []);
 
@@ -201,18 +214,17 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
       const t = Array.from(e.results).map(x => x[0].transcript).join(" ").trim();
       if (t) { setPrompt(prev => prev ? `${prev} ${t}` : t); textaRef.current?.focus(); }
     };
-    r.onerror = (e: SpeechRecognitionErrorEvent) => {
-      // Suppress non-errors: "no-speech" = mic timeout (user said nothing),
-      // "aborted" = stop() called programmatically — both are expected flows.
+    r.onerror = (e: Event) => {
+      const err = (e as Event & { error: string }).error;
       const silent = ["no-speech", "aborted"];
-      if (!silent.includes(e.error)) {
+      if (!silent.includes(err)) {
         const msg: Record<string, string> = {
-          "not-allowed":     "Microphone access denied. Allow mic in browser settings.",
-          "audio-capture":   "No microphone found. Check your audio device.",
-          "network":         "Network error — voice recognition requires internet.",
+          "not-allowed":         "Microphone access denied. Allow mic in browser settings.",
+          "audio-capture":       "No microphone found. Check your audio device.",
+          "network":             "Network error — voice recognition requires internet.",
           "service-not-allowed": "Voice service not available in this browser.",
         };
-        setVoiceErr(msg[e.error] || `Voice error: ${e.error}`);
+        setVoiceErr(msg[err] || `Voice error: ${err}`);
       }
       setListening(false);
     };
@@ -226,9 +238,10 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
   const isZip   = /^\d{5}$/.test(prompt.trim());
   const hasText = prompt.trim().length >= 3;
 
-  const finalZip    = zipOver.trim()    || parsed?.zip_code   || (isZip ? prompt.trim() : "75070");
-  const finalBudget = budgetOver.trim() ? (parseInt(budgetOver.replace(/\D/g,"")) || 450000)
-                                        : (parsed?.budget || 450000);
+  const finalZip    = zipOver.trim() || (cityOver.trim() ? "" : (parsed?.zip_code || (isZip ? prompt.trim() : "75070")));
+  const finalBudget = budgetOver.trim()
+    ? (parseInt(budgetOver.replace(/\D/g,"")) || 450000)
+    : (parseBudgetFromText(prompt) ?? parsed?.budget ?? 450000);
   const finalType   = (typeOver  || parsed?.property_type || "SFH") as SearchParams["property_type"];
   const finalBeds   = bedsOver   ?? parsed?.min_beds ?? 3;
   const finalStrat  = (stratOver || parsed?.strategy  || "LTR") as SearchParams["strategy"];

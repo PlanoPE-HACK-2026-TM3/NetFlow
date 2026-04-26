@@ -98,29 +98,31 @@ log_cache   = logging.getLogger("netflow.cache")
 # ══════════════════════════════════════════════════════════════
 
 class ScoredProperty(BaseModel):
-    rank:          int
-    address:       str
-    zip_code:      str
-    price:         int
-    est_rent:      int
-    cap_rate:      float = Field(description="Net cap rate after 35% expense ratio")
-    cash_flow:     int   = Field(description="Monthly cash flow after PITI + expenses")
-    grm:           float = Field(description="Gross Rent Multiplier")
-    dom:           int   = Field(description="Days on market")
-    ai_score:      int   = Field(ge=0, le=100)
-    tags:          list[str]
-    beds:          int
-    baths:         float
-    sqft:          int
-    year_built:    int   = 0
-    lot_size:      int   = 0
-    mls_id:        str   = ""
-    map_query:     str   = ""
-    photo_url:     str   = ""
+    rank:            int
+    address:         str
+    zip_code:        str
+    price:           int
+    est_rent:        int
+    cap_rate:        float = Field(description="Net cap rate after 35% expense ratio")
+    cash_flow:       int   = Field(description="Monthly cash flow after PITI + expenses")
+    grm:             float = Field(description="Gross Rent Multiplier")
+    dom:             int   = Field(description="Days on market")
+    ai_score:        int   = Field(ge=0, le=100)
+    tags:            list[str]
+    beds:            int
+    baths:           float
+    sqft:            int
+    year_built:      int   = 0
+    lot_size:        int   = 0
+    mls_id:          str   = ""
+    map_query:       str   = ""
+    photo_url:       str   = ""
     # Rich agent outputs (new in v3)
-    strategy_note: str   = ""   # why this property fits the strategy
-    risk_level:    str   = ""   # LOW / MEDIUM / HIGH
-    risk_factors:  list[str] = Field(default_factory=list)
+    strategy_note:   str   = ""   # why this property fits the strategy
+    risk_level:      str   = ""   # LOW / MEDIUM / HIGH
+    risk_factors:    list[str] = Field(default_factory=list)
+    # LLM answer quality (v4)
+    llm_correctness: int   = 0    # 0-100: LLM score vs rule-baseline agreement
 
 
 @dataclass
@@ -406,13 +408,14 @@ Bands:
   grm       <100=100  100-130=70  130-160=40  >160=10
   dom       <14d=100  <30d=65  <60d=30  >=60d=0
 Strategy bonus +8 pts: LTR if CF>200, STR if cap>5.5, BRRRR if dom>40, Flip if dom<20
-Tags (pick 1-2): Cash+, High cap, Hot deal, Value-add, Low DOM, High yield, Neg CF
+Budget penalty: deduct 8 pts if price > 90% of budget ceiling; deduct 15 pts if price > 95% of budget ceiling.
+Tags (pick 1-2): Cash+, High cap, Hot deal, Value-add, Low DOM, High yield, Neg CF, Near ceiling
 
 Return ONLY a JSON array, one object per input property, same order as input:
 [{{"ai_score": 85, "tags": ["Cash+", "High cap"]}}, {{"ai_score": 72, "tags": ["Low DOM"]}}, ...]
 No explanation. No markdown fences. Just the raw JSON array."""
 
-SCORING_HUMAN = "Strategy: {strategy} | Mortgage rate: {rate}%\nProperties:\n{data}"
+SCORING_HUMAN = "Strategy: {strategy} | Mortgage rate: {rate}% | Budget ceiling: ${budget:,}\nProperties:\n{data}"
 
 # Strategy reranking is rule-based (see _rule_strategy_rerank).
 # No LLM call needed — deterministic adjustments are faster and more reliable
@@ -663,6 +666,7 @@ class PropertyScorerAgent:
             raw = await chain.ainvoke({
                 "strategy": ctx.strategy,
                 "rate":     rate,
+                "budget":   ctx.budget,
                 "data":     json.dumps(compact),
             })
             ctx.token_usage["llm_score"] = len(compact) * 20 + 140
@@ -681,10 +685,14 @@ class PropertyScorerAgent:
                 info = raw[i] if i < len(raw) else {}
                 if not isinstance(info, dict):
                     info = {}
+                llm_ai = max(0, min(100, int(info.get("ai_score", 50))))
+                rule_s, _ = _rule_based_score_fn(prop, ctx.strategy)
+                correctness = max(0, min(100, 100 - abs(llm_ai - rule_s) * 2))
                 results.append({
                     **prop,
-                    "ai_score": max(0, min(100, int(info.get("ai_score", 50)))),
-                    "tags":     [str(t) for t in info.get("tags", [])][:2],
+                    "ai_score":        llm_ai,
+                    "tags":            [str(t) for t in info.get("tags", [])][:2],
+                    "llm_correctness": correctness,
                 })
 
             # Guarantee 10 items if LLM returned fewer
@@ -761,7 +769,7 @@ class PropertyScorerAgent:
         for prop in ctx.enriched:
             s, t = _rule_based_score_fn(prop, ctx.strategy)
             results.append({**prop, "ai_score": s, "tags": t, "strategy_note": "",
-                            "_idx": prop.get("_idx", 0)})
+                            "llm_correctness": 100, "_idx": prop.get("_idx", 0)})
         return results
 
     def _assemble(self, ctx: AgentContext) -> list[ScoredProperty]:
@@ -978,6 +986,7 @@ class NetFlowAgent:
         listings:      list[dict],
         mortgage_rate: float,
         strategy:      str,
+        budget:        int = 450_000,
         fred_service   = None,
         rentcast_service = None,
     ) -> list[ScoredProperty]:
@@ -991,7 +1000,7 @@ class NetFlowAgent:
         """
         ctx = AgentContext(
             zip_code  = listings[0].get("zip_code","") if listings else "",
-            budget    = 0,
+            budget    = budget,
             strategy  = strategy,
             listings  = listings,
         )
