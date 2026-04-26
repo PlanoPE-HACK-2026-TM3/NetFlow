@@ -1,0 +1,25 @@
+# =============================================================================
+# NetFlow — frontend/.dockerignore
+# Applies when the build context is ./frontend (Next.js image).
+# =============================================================================
+
+node_modules
+.next
+out
+.vercel
+
+# Env
+.env
+.env.local
+.env.development
+.env.production
+
+# Misc
+Dockerfile
+.dockerignore
+*.log
+.DS_Store
+Thumbs.db
+.git
+.idea/
+.vscode/

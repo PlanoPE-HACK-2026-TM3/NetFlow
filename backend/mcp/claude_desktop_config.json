@@ -1,0 +1,37 @@
+{
+  "_comment": "Paste the 'mcpServers' block into your Claude Desktop config file.",
+  "_windows_path": "%APPDATA%\\Claude\\claude_desktop_config.json",
+  "_mac_path":     "~/Library/Application Support/Claude/claude_desktop_config.json",
+  "_important":    "Use the venv Python, not the system Python — fastapi/httpx are installed there.",
+
+  "mcpServers": {
+    "netflow": {
+      "_comment_windows": "Use the venv python.exe so all pip packages are available",
+      "command": "C:\\netflow\\venv\\Scripts\\python.exe",
+      "args":    ["-m", "backend.mcp.server"],
+      "cwd":     "C:\\netflow",
+      "env": {
+        "PYTHONPATH":      "C:\\netflow",
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OLLAMA_MODEL":    "llama3",
+        "DEMO_MODE":       "false"
+      }
+    }
+  },
+
+  "_mac_variant": {
+    "mcpServers": {
+      "netflow": {
+        "command": "/path/to/netflow/venv/bin/python",
+        "args":    ["-m", "backend.mcp.server"],
+        "cwd":     "/path/to/netflow",
+        "env": {
+          "PYTHONPATH":      "/path/to/netflow",
+          "OLLAMA_BASE_URL": "http://localhost:11434",
+          "OLLAMA_MODEL":    "llama3",
+          "DEMO_MODE":       "false"
+        }
+      }
+    }
+  }
+}

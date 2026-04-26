@@ -1,0 +1,388 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   NetFlow Design System v3 — Refined Real Estate Portal
+   Aesthetic: Luxury property portal, dark navy + warm gold accents
+   Typography: Tight spacing, generous hierarchy, data-dense cards
+═══════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables ─────────────────────────────────────────── */
+:root {
+  --bg-base:   #070c18;
+  --bg-surf:   #0d1525;
+  --bg-card:   #111e35;
+  --bg-raise:  #172340;
+  --bg-hover:  #1e2d4e;
+  --bg-glass:  rgba(17,30,53,0.85);
+
+  --bd:        rgba(255,255,255,0.07);
+  --bd-md:     rgba(255,255,255,0.11);
+  --bd-hi:     rgba(99,155,255,0.35);
+
+  --t1: #f0f6ff;
+  --t2: #a8bcd8;
+  --t3: #4a6080;
+  --t4: #253248;
+
+  --pri:    #2563eb;
+  --pri-hi: #4f8fff;
+  --pri-lo: rgba(37,99,235,0.12);
+
+  --grn:    #10b981;
+  --grn-lo: rgba(16,185,129,0.12);
+  --amb:    #f59e0b;
+  --amb-lo: rgba(245,158,11,0.10);
+  --red:    #f43f5e;
+  --red-lo: rgba(244,63,94,0.10);
+  --ppl:    #8b5cf6;
+  --cyn:    #06b6d4;
+
+  --gold:   #e8b84b;
+  --gold-lo:rgba(232,184,75,0.10);
+
+  --shd-sm: 0 2px 8px rgba(0,0,0,0.35);
+  --shd:    0 8px 32px rgba(0,0,0,0.50);
+  --shd-lg: 0 20px 60px rgba(0,0,0,0.65);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  --header-h: 60px;
+  --sidebar-w: 292px;
+}
+
+[data-theme="light"] {
+  --bg-base:   #f0f4fa;
+  --bg-surf:   #ffffff;
+  --bg-card:   #ffffff;
+  --bg-raise:  #f7f9ff;
+  --bg-hover:  #edf2ff;
+  --bg-glass:  rgba(255,255,255,0.90);
+
+  --bd:        rgba(37,99,235,0.10);
+  --bd-md:     rgba(37,99,235,0.16);
+  --bd-hi:     rgba(37,99,235,0.38);
+
+  --t1: #0a1628;
+  --t2: #2c4a72;
+  --t3: #6b84a8;
+  --t4: #b0c4dc;
+
+  --pri:    #2563eb;
+  --pri-hi: #1d4ed8;
+  --pri-lo: rgba(37,99,235,0.08);
+
+  --grn:    #059669;
+  --grn-lo: rgba(5,150,105,0.09);
+  --amb:    #d97706;
+  --amb-lo: rgba(217,119,6,0.08);
+  --red:    #e11d48;
+  --red-lo: rgba(225,29,72,0.08);
+  --ppl:    #7c3aed;
+  --cyn:    #0284c7;
+
+  --gold:   #b45309;
+  --gold-lo:rgba(180,83,9,0.08);
+
+  --shd-sm: 0 2px 8px rgba(37,99,235,0.08);
+  --shd:    0 8px 28px rgba(37,99,235,0.11);
+  --shd-lg: 0 20px 50px rgba(37,99,235,0.14);
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg-base);
+    color: var(--t1);
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 4px; height: 4px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: var(--bd-hi); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--pri); }
+
+/* ── Global transitions — colour only, never layout ────────── */
+* { transition: background-color .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease, opacity .2s ease; }
+.spinner,.score-bar-fill,.msg-in,.note-in,.fade-in,.slide-in,.pop-in { transition: none !important; }
+.score-bar-fill { transition: width .9s cubic-bezier(.4,0,.2,1) !important; }
+.prop-card      { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease !important; }
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes spin       { to { transform: rotate(360deg); } }
+@keyframes fadeUp     { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeIn     { from { opacity:0; } to { opacity:1; } }
+@keyframes slideRight { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+@keyframes popIn      { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
+@keyframes blink      { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
+@keyframes voiceBar   { from { height:4px; opacity:.5; } to { height:14px; opacity:1; } }
+@keyframes shimmer    { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+@keyframes mq-ticker  { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
+@keyframes cardIn     {
+  from { opacity:0; transform:translateY(16px) scale(.98); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+@keyframes chatSlide  {
+  from { opacity:0; transform:translateX(24px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+
+.fade-in   { animation: fadeUp    .25s ease both; }
+.note-in   { animation: cardIn    .32s ease both; }
+.slide-in  { animation: slideRight .28s ease both; }
+.msg-in    { animation: fadeUp    .20s ease both; }
+.pop-in    { animation: popIn     .20s ease both; }
+.chat-in   { animation: chatSlide .28s ease both; }
+
+/* ── Utility ───────────────────────────────────────────────── */
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--bd-md);
+  border-top-color: var(--pri);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+.ai-typing {
+  display: inline-block; width: 5px; height: 14px;
+  background: var(--pri-hi); animation: blink 1s infinite;
+  vertical-align: middle; margin-left: 3px; border-radius: 2px;
+}
+
+/* ── Tooltip ───────────────────────────────────────────────── */
+.tip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+.tip-box {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%; transform: translateX(-50%);
+  background: var(--bg-raise);
+  border: 1px solid var(--bd-hi);
+  border-radius: var(--r-md);
+  padding: 10px 13px;
+  font-size: 11.5px; line-height: 1.65;
+  color: var(--t2);
+  width: 210px;
+  box-shadow: var(--shd);
+  z-index: 9999;
+  opacity: 0; pointer-events: none;
+  white-space: normal;
+  transition: opacity .18s ease !important;
+}
+.tip-box::after {
+  content: '';
+  position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--bd-hi);
+}
+.tip-wrap:hover .tip-box,
+.tip-wrap:focus-within .tip-box,
+.tip-wrap.tip-open .tip-box { opacity: 1; }
+.tip-right .tip-box { left: auto; right: 0; transform: none; }
+.tip-right .tip-box::after { left: auto; right: 14px; transform: none; }
+
+/* ── App shell ─────────────────────────────────────────────── */
+.app-shell    { display: flex; flex-direction: column; min-height: 100dvh; }
+.app-body     { display: flex; flex: 1; overflow: hidden; }
+
+/* Header */
+.app-header {
+  height: var(--header-h);
+  padding: 0 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--bd);
+  position: sticky; top: 0; z-index: 300;
+  box-shadow: 0 1px 0 var(--bd), var(--shd-sm);
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  flex-shrink: 0;
+  height: calc(100dvh - var(--header-h));
+  position: sticky;
+  top: var(--header-h);
+  overflow-y: auto;
+  padding: 18px 16px 24px;
+  background: var(--bg-surf);
+  border-right: 1px solid var(--bd);
+}
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 400;
+    height: 100dvh;
+    transform: translateX(-100%);
+    padding-top: var(--header-h);
+    box-shadow: none;
+    transition: transform .28s cubic-bezier(.4,0,.2,1), box-shadow .28s ease !important;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shd-lg);
+  }
+}
+
+/* Overlay */
+.mob-overlay { display: none; position: fixed; inset: 0; z-index: 399; background: rgba(0,0,0,.6); }
+.mob-overlay.open { display: block; animation: fadeIn .2s ease; }
+
+/* Main content */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: clamp(16px,2.5vw,28px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scroll-behavior: smooth;
+}
+
+/* Property grid */
+.props-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 639px)  { .props-grid { grid-template-columns: 1fr; gap: 14px; } }
+@media (min-width: 640px) and (max-width: 1023px) { .props-grid { grid-template-columns: repeat(2,1fr); gap: 16px; } }
+
+/* ── Property card ─────────────────────────────────────────── */
+.prop-card {
+  background: var(--bg-surf);
+  border: 1px solid var(--bd);
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 14px rgba(0,0,0,.10);
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+.prop-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 50px rgba(0,0,0,.22), 0 0 0 1px var(--bd-hi);
+}
+.prop-card.selected {
+  border-color: var(--pri);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.18), 0 14px 44px rgba(0,0,0,.22);
+  transform: translateY(-3px);
+}
+
+/* Photo shimmer loading state */
+.photo-shimmer {
+  background: linear-gradient(90deg, var(--bg-raise) 25%, var(--bg-hover) 50%, var(--bg-raise) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.8s infinite;
+}
+
+/* ── Chat panel ────────────────────────────────────────────── */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  /* Fill the sticky column — cards side sets the height context */
+  height: calc(100dvh - var(--header-h) - 32px);
+  max-height: 900px;
+  min-height: 480px;
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  background: var(--bg-surf);
+  border: 1px solid var(--bd-hi);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--shd);
+  animation: chatSlide .28s ease both;
+}
+/* Messages area must scroll, not the whole panel */
+.chat-panel > .chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+@media (max-width: 1023px) {
+  .chat-panel {
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    z-index: 350;
+  }
+}
+
+/* ── Log viewer ────────────────────────────────────────────── */
+.log-row {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  padding: 4px 8px; border-radius: 5px; margin-bottom: 3px;
+  background: var(--bg-raise); border-left: 3px solid var(--bd);
+}
+.log-info  { border-left-color: var(--pri-hi); }
+.log-warn  { border-left-color: var(--amb); }
+.log-error { border-left-color: var(--red); }
+.log-debug { border-left-color: var(--t3); }
+
+/* ── Hide / show helpers ───────────────────────────────────── */
+.hide-mob   {}
+.show-mob   { display: none; }
+.mob-btn    { display: none; }
+@media (max-width: 768px) {
+  .hide-mob    { display: none !important; }
+  .show-mob    { display: block !important; }
+  .hide-mob-fl { display: none !important; }
+  .mob-btn     { display: flex !important; }
+}
+
+/* ── Micro components ──────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+  white-space: nowrap;
+}
+.score-bar-track {
+  height: 5px; border-radius: 99px;
+  background: var(--bd); overflow: hidden; flex: 1;
+}
+.score-bar-fill {
+  height: 100%; border-radius: 99px;
+  transition: width .9s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Note colour variants (kept for possible use) ──────────── */
+.note-v,.note-g,.note-a,.note-c,.note-p {}
+
+/* ── Sticky / old card ─────────────────────────────────────── */
+.sticky {
+  border-radius: var(--r-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--bd);
+  box-shadow: var(--shd-sm);
+  position: relative; overflow: hidden; cursor: pointer;
+}
+.sticky:hover { transform:translateY(-3px); box-shadow: var(--shd); }
+.sticky.sel   { border-color: var(--pri-hi); box-shadow: 0 0 0 2px rgba(37,99,235,.18), var(--shd); }
+.sticky-top   { height:4px; border-radius:var(--r-lg) var(--r-lg) 0 0; position:absolute; top:0; left:0; right:0; }
+.sticky-top.note-v { background: linear-gradient(90deg,#4f9eff,#1d4ed8); }
+.sticky-top.note-g { background: linear-gradient(90deg,#10b981,#059669); }
+.sticky-top.note-a { background: linear-gradient(90deg,#f59e0b,#d97706); }
+.sticky-top.note-c { background: linear-gradient(90deg,#f43f5e,#c0273e); }
+.sticky-top.note-p { background: linear-gradient(90deg,#a78bfa,#6d28d9); }

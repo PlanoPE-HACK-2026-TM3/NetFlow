@@ -1,0 +1,70 @@
+# =============================================================================
+# NetFlow — root .dockerignore
+# Applies to any build that uses the repo root as its context (i.e. backend).
+# =============================================================================
+
+# --- Version control ---
+.git
+.gitignore
+.gitattributes
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# --- Backend dev leftovers shipped in the repo (backups from prior iterations) ---
+backend/main.py.bkp
+backend/main.py.bkpbkp
+backend/main.py_0221
+backend/main.py_0420
+backend/agents/netflow_agent.py.bkp
+backend/services/rentcast.py.bkp
+backend/services/fred.py.bkp
+
+# --- Environments & secrets ---
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+*.key
+*.pem
+*.p12
+secrets/
+
+# --- Node (keep it out of the backend context entirely) ---
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/.vercel
+
+# --- Logs & temp ---
+*.log
+/tmp
+.langchain/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Docs, Makefile, startup scripts (not needed inside the image) ---
+Documentation/
+Makefile
+start.sh
+start.bat
+README.md
+DOCKER_README.md

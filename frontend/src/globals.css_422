@@ -1,0 +1,358 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════
+   NetFlow — Complete Responsive Theme System  v2
+   Variables:  --var-name  (short 2-4 char tokens for DRY CSS)
+   Themes:     :root = dark  |  [data-theme="light"] = light
+═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── DARK THEME ──────────────────────────────────────────────
+     Base: deep cool navy  |  Primary: electric indigo-blue
+     5-card palette: bold RGB hues that pop on dark bg
+     Semantic: pure RGB green / amber / red (no tints)
+  ─────────────────────────────────────────────────────────── */
+
+  /* Backgrounds — true dark navy, not purple-tinted */
+  --bg-base:  #0a0e1a;
+  --bg-surf:  #111827;
+  --bg-raise: #1c2333;
+  --bg-hover: #232d42;
+
+  /* Borders — cool blue-grey */
+  --bd:    rgba(99,120,180,0.20);
+  --bd-hi: rgba(99,120,220,0.50);
+
+  /* Text — warm white to slate */
+  --t1: #f8fafc;
+  --t2: #c8d6e8;
+  --t3: #5e7494;
+  --t4: #2e3f55;
+
+  /* Brand — electric indigo */
+  --pri:    #4f6ef7;
+  --pri-hi: #7b93ff;
+
+  /* Semantic — pure RGB */
+  --grn: #22c55e;
+  --amb: #f59e0b;
+  --red: #f43f5e;
+  --cyn: #06b6d4;
+  --pnk: #e879f9;
+
+  /* Shadows */
+  --shd:    0 4px 28px rgba(0,0,0,0.55);
+  --shd-sm: 0 2px 10px rgba(0,0,0,0.35);
+
+  /* ── 5 sticky note colours — vivid distinct RGB hues ──
+     1. Cobalt blue    2. Emerald green   3. Amber orange
+     4. Rose red       5. Violet purple
+  ───────────────────────────────────────────────────── */
+  --n1-bg: #0f1c38; --n1-tp: #4f9eff; --n1-bd: rgba(79,158,255,0.32);
+  --n2-bg: #0c2218; --n2-tp: #22c55e; --n2-bd: rgba(34,197,94,0.32);
+  --n3-bg: #231500; --n3-tp: #fb923c; --n3-bd: rgba(251,146,60,0.32);
+  --n4-bg: #24091a; --n4-tp: #f43f5e; --n4-bd: rgba(244,63,94,0.32);
+  --n5-bg: #1a0e30; --n5-tp: #a78bfa; --n5-bd: rgba(167,139,250,0.32);
+}
+
+[data-theme="light"] {
+  /* ── LIGHT THEME ─────────────────────────────────────────────
+     Base: clean white  |  Primary: vivid royal blue
+     5-card palette: saturated RGB colours on white — pop and punch
+     Semantic: full-saturation RGB (no washed-out pastels)
+  ─────────────────────────────────────────────────────────── */
+
+  /* Backgrounds — clean white, very light grey surfaces */
+  --bg-base:  #f1f5fb;
+  --bg-surf:  #ffffff;
+  --bg-raise: #f8f9ff;
+  --bg-hover: #edf0ff;
+
+  /* Borders — blue-grey with more presence */
+  --bd:    rgba(59,90,180,0.16);
+  --bd-hi: rgba(59,90,220,0.45);
+
+  /* Text — deep navy → mid grey */
+  --t1: #0d1b2e;
+  --t2: #1e3050;
+  --t3: #5c6e8a;
+  --t4: #9ba8bc;
+
+  /* Brand — vivid royal blue */
+  --pri:    #2563eb;
+  --pri-hi: #1d4ed8;
+
+  /* Semantic — saturated, WCAG-AA on white */
+  --grn: #16a34a;
+  --amb: #d97706;
+  --red: #e11d48;
+  --cyn: #0284c7;
+  --pnk: #c026d3;
+
+  /* Shadows — blue-tinted */
+  --shd:    0 4px 20px rgba(37,99,235,0.14);
+  --shd-sm: 0 2px 8px  rgba(37,99,235,0.09);
+
+  /* ── 5 sticky note colours — vivid saturated RGB on white ──
+     1. Royal blue     2. Forest green    3. Burnt orange
+     4. Crimson red    5. Deep violet
+  ───────────────────────────────────────────────────────── */
+  --n1-bg: #eff6ff; --n1-tp: #2563eb; --n1-bd: rgba(37,99,235,0.25);
+  --n2-bg: #f0fdf4; --n2-tp: #16a34a; --n2-bd: rgba(22,163,74,0.25);
+  --n3-bg: #fff7ed; --n3-tp: #ea580c; --n3-bd: rgba(234,88,12,0.25);
+  --n4-bg: #fff1f2; --n4-tp: #e11d48; --n4-bd: rgba(225,29,72,0.25);
+  --n5-bg: #faf5ff; --n5-tp: #7c3aed; --n5-bd: rgba(124,58,237,0.25);
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  html {
+    font-size: 16px;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg-base);
+    color: var(--t1);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar         { width:4px; height:4px }
+::-webkit-scrollbar-track   { background:var(--bg-base) }
+::-webkit-scrollbar-thumb   { background:var(--bd-hi); border-radius:4px }
+::-webkit-scrollbar-thumb:hover { background:var(--pri) }
+
+/* ── Global transitions (colour-only, skip layout props) ───── */
+* { transition: background-color .25s ease, border-color .25s ease, color .25s ease, box-shadow .25s ease; }
+
+/* Exempt animated elements */
+.spinner,.score-bar-fill,.ai-typing,.note-in,.fade-in,.slide-in,.msg-in,.pop-in,
+.score-bar-fill,.hscore-fill { transition: none !important; }
+/* Re-allow specific transitions on these */
+.score-bar-fill { transition: width .9s cubic-bezier(.4,0,.2,1) !important; }
+.hscore-fill    { transition: width .9s ease !important; }
+.sticky         { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease !important; }
+.tip-box        { transition: opacity .18s ease !important; }
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes blink    { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+@keyframes spin     { to{transform:rotate(360deg)} }
+@keyframes fadeUp   { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes noteIn   { from{opacity:0;transform:translateY(12px) rotate(-.5deg)} to{opacity:1;transform:translateY(0) rotate(0)} }
+@keyframes slideR   { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
+@keyframes voiceBar { from{height:4px;opacity:.5} to{height:13px;opacity:1} }
+@keyframes popIn    { from{transform:scale(.92);opacity:0} to{transform:scale(1);opacity:1} }
+@keyframes pulseRing{ 0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.4)} 50%{box-shadow:0 0 0 6px rgba(139,92,246,0)} }
+
+.fade-in  { animation: fadeUp  .22s ease both; }
+.note-in  { animation: noteIn  .30s ease both; }
+.slide-in { animation: slideR  .28s ease both; }
+.msg-in   { animation: fadeUp  .22s ease both; }
+.pop-in   { animation: popIn   .20s ease both; }
+
+/* ── Global reusables ─────────────────────────────────────── */
+.spinner    { width:36px;height:36px;border:3px solid var(--bd);border-top-color:var(--pri-hi);border-radius:50%;animation:spin .75s linear infinite; }
+.ai-typing  { display:inline-block;width:5px;height:14px;background:var(--pri-hi);animation:blink 1s infinite;vertical-align:middle;margin-left:2px;border-radius:2px; }
+
+/* ── Sticky note cards ─────────────────────────────────────── */
+.sticky {
+  border-radius: 14px;
+  background: var(--bg-surf);
+  border: 1px solid var(--bd);
+  box-shadow: var(--shd-sm);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.sticky:hover       { transform:translateY(-3px) rotate(.25deg); box-shadow:var(--shd),0 0 0 1px var(--bd-hi); }
+.sticky.sel         { transform:translateY(-3px); box-shadow:var(--shd),0 0 0 2px var(--pri-hi); border-color:var(--bd-hi); }
+.sticky-top         { height:5px; border-radius:14px 14px 0 0; position:absolute; top:0; left:0; right:0; }
+
+/* 5 note colour variants */
+.note-v { --nb:var(--n1-bg); --nt:var(--n1-tp); --nbr:var(--n1-bd); }
+.note-g { --nb:var(--n2-bg); --nt:var(--n2-tp); --nbr:var(--n2-bd); }
+.note-a { --nb:var(--n3-bg); --nt:var(--n3-tp); --nbr:var(--n3-bd); }
+.note-c { --nb:var(--n4-bg); --nt:var(--n4-tp); --nbr:var(--n4-bd); }
+.note-p { --nb:var(--n5-bg); --nt:var(--n5-tp); --nbr:var(--n5-bd); }
+
+.sticky.note-v, .sticky.note-g, .sticky.note-a, .sticky.note-c, .sticky.note-p {
+  background: var(--nb);
+  border-color: var(--nbr);
+}
+.sticky-top.note-v { background: linear-gradient(90deg,#4f9eff,#2563eb); }
+.sticky-top.note-g { background: linear-gradient(90deg,#22c55e,#16a34a); }
+.sticky-top.note-a { background: linear-gradient(90deg,#fb923c,#ea580c); }
+.sticky-top.note-c { background: linear-gradient(90deg,#f43f5e,#e11d48); }
+.sticky-top.note-p { background: linear-gradient(90deg,#a78bfa,#7c3aed); }
+
+/* ── Tooltip ──────────────────────────────────────────────── */
+.tip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: help;
+}
+.tip-box {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-raise);
+  border: 1px solid var(--bd-hi);
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--t2);
+  white-space: normal;
+  width: 215px;
+  box-shadow: var(--shd);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+}
+.tip-box::after {
+  content: '';
+  position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--bd-hi);
+}
+/* Trigger: hover, keyboard focus, or .tip-open class */
+.tip-wrap:hover .tip-box,
+.tip-wrap:focus-within .tip-box,
+.tip-wrap.tip-open .tip-box { opacity: 1; }
+
+/* Right-edge variant (card 3, 6, 9) */
+.tip-right .tip-box { left:auto; right:0; transform:none; }
+.tip-right .tip-box::after { left:auto; right:14px; transform:none; }
+
+/* ── Score chart strip (horizontal, above grid) ───────────── */
+.score-strip {
+  background: var(--bg-surf);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.hscore-bar  { height:10px; border-radius:5px; background:var(--bg-raise); overflow:hidden; flex:1; }
+.hscore-fill { height:100%; border-radius:5px; }
+
+/* ── Rank formula floating sticky note ────────────────────── */
+.rank-note {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  z-index: 500;
+  width: 276px;
+  border-radius: 14px;
+  background: var(--bg-raise);
+  border: 1px solid var(--bd-hi);
+  box-shadow: var(--shd);
+  overflow: hidden;
+}
+@media(max-width:640px) {
+  .rank-note { bottom:68px; right:8px; left:8px; width:auto; }
+}
+
+/* ── Responsive app layout ────────────────────────────────── */
+.app-shell { display:flex; flex-direction:column; min-height:100vh; }
+
+.app-header {
+  height: 60px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-surf);
+  border-bottom: 1px solid var(--bd);
+  position: sticky; top:0; z-index:300;
+  box-shadow: var(--shd-sm);
+}
+
+.app-body { display:flex; flex:1; overflow:hidden; }
+
+/* Left panel — frozen on scroll (desktop) */
+.sidebar {
+  width: 290px;
+  min-width: 290px;
+  flex-shrink: 0;
+  height: calc(100vh - 60px);
+  position: sticky;
+  top: 60px;
+  overflow-y: auto;
+  padding: 16px 14px;
+  background: var(--bg-surf);
+  border-right: 1px solid var(--bd);
+}
+
+/* Mobile sidebar → slide-in drawer */
+@media(max-width:768px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 400;
+    height: 100dvh;
+    width: 290px;
+    transform: translateX(-100%);
+    padding-top: 60px;
+    box-shadow: none;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shd);
+  }
+}
+
+/* Overlay behind mobile sidebar */
+.mob-overlay { display:none; position:fixed; inset:0; z-index:399; background:rgba(0,0,0,.55); }
+.mob-overlay.open { display:block; }
+
+/* Main content area */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: clamp(12px,2vw,20px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Property cards grid */
+.props-grid {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+}
+/* 10 cards in 2 rows: 5 columns desktop, 2 tablet, 1 mobile */
+@media(max-width:599px)                        { .props-grid { grid-template-columns: 1fr; gap:10px; } }
+@media(min-width:600px) and (max-width:1023px) { .props-grid { grid-template-columns: repeat(2,1fr); gap:12px; } }
+@media(min-width:1024px)                       { .props-grid { grid-template-columns: repeat(5,1fr); gap:12px; } }
+
+/* Show/hide helpers */
+.hide-mob    { }
+.show-mob    { display:none; }
+.mob-btn     { display:none; }
+@media(max-width:768px) {
+  .hide-mob     { display:none !important; }
+  .show-mob     { display:block !important; }
+  .hide-mob-fl  { display:none !important; }
+  .mob-btn      { display:flex  !important; }
+}
+
+/* App log viewer */
+.log-row { font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px 8px; border-radius:5px;
+           margin-bottom:3px; background:var(--bg-raise); border-left:3px solid var(--bd); }
+.log-info  { border-left-color:var(--pri-hi); }
+.log-warn  { border-left-color:var(--amb); }
+.log-error { border-left-color:var(--red); }
+.log-debug { border-left-color:var(--t3); }
