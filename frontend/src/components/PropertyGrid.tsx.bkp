@@ -1,0 +1,144 @@
+"use client";
+import type { Property } from "@/lib/types";
+
+interface Props { properties:Property[]; onSelectProperty:(p:Property)=>void; selectedProperty:Property|null; }
+
+// Score → tier icon + label + color
+function scoreInfo(score:number):{icon:string;label:string;color:string;bg:string;border:string}{
+  if(score>=85) return{icon:"🏆",label:"Excellent",color:"#10b981",bg:"rgba(16,185,129,0.1)",border:"rgba(16,185,129,0.3)"};
+  if(score>=70) return{icon:"⭐",label:"Strong",   color:"#8b5cf6",bg:"rgba(139,92,246,0.1)",border:"rgba(139,92,246,0.3)"};
+  if(score>=55) return{icon:"✅",label:"Good",     color:"#06b6d4",bg:"rgba(6,182,212,0.1)",  border:"rgba(6,182,212,0.3)"};
+  if(score>=40) return{icon:"⚠️",label:"Fair",     color:"#f59e0b",bg:"rgba(245,158,11,0.1)", border:"rgba(245,158,11,0.3)"};
+  return              {icon:"❌",label:"Weak",      color:"#ef4444",bg:"rgba(239,68,68,0.1)",  border:"rgba(239,68,68,0.3)"};
+}
+
+function cashFlowIcon(cf:number):string{ return cf>400?"💎":cf>200?"💚":cf>0?"🟡":"🔴"; }
+function capRateIcon(cr:number):string { return cr>6?"🚀":cr>4.5?"📈":"📉"; }
+function domIcon(dom:number):string    { return dom<14?"🔥":dom<30?"⏱️":"🐌"; }
+
+const tagStyle=(tag:string):React.CSSProperties=>{
+  if(tag.includes("Pick")||tag.includes("⭐")) return{background:"rgba(139,92,246,0.12)",border:"1px solid rgba(139,92,246,0.3)",color:"#a78bfa"};
+  if(tag.includes("Hot")||tag.includes("🔥"))  return{background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.25)",color:"#fbbf24"};
+  if(tag.includes("Cash+"))                    return{background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.25)",color:"#34d399"};
+  return{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"#64748b"};
+};
+
+function ScoreRing({score}:{score:number}){
+  const {icon,label,color,bg,border}=scoreInfo(score);
+  const r=22, circ=2*Math.PI*r, fill=(score/100)*circ;
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",minWidth:"70px"}}>
+      <div style={{position:"relative",width:"54px",height:"54px"}}>
+        <svg width="54" height="54" viewBox="0 0 54 54" style={{transform:"rotate(-90deg)"}}>
+          <circle cx="27" cy="27" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={5}/>
+          <circle cx="27" cy="27" r={r} fill="none" stroke={color} strokeWidth={5}
+            strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
+            style={{transition:"stroke-dasharray 0.9s cubic-bezier(.4,0,.2,1)"}}/>
+        </svg>
+        <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:"13px",lineHeight:1}}>{icon}</span>
+          <span style={{fontSize:"10px",fontWeight:800,color,fontFamily:"'JetBrains Mono',monospace",lineHeight:1,marginTop:"1px"}}>{score}</span>
+        </div>
+      </div>
+      <div style={{padding:"2px 7px",borderRadius:"10px",background:bg,border:`1px solid ${border}`,fontSize:"10px",fontWeight:700,color}}>{label}</div>
+    </div>
+  );
+}
+
+function PropertyCard({p,onSelect,selected}:{p:Property;onSelect:()=>void;selected:boolean}){
+  const isTop=p.rank<=2;
+  const cfC=p.cash_flow>300?"#10b981":p.cash_flow>0?"#f59e0b":"#ef4444";
+  const crC=p.cap_rate>6?"#10b981":p.cap_rate>4.5?"#f59e0b":"#8b5cf6";
+  const {color:scoreColor}=scoreInfo(p.ai_score);
+
+  return(
+    <div onClick={onSelect}
+      className={`prop-card${selected?" prop-card-selected":""}`}
+      style={{
+        background:selected?"rgba(139,92,246,0.08)":isTop?"rgba(139,92,246,0.05)":"rgba(255,255,255,0.02)",
+        border:`1px solid ${selected?"rgba(139,92,246,0.5)":isTop?"rgba(139,92,246,0.2)":"rgba(139,92,246,0.1)"}`,
+        borderRadius:"14px",padding:"16px 18px",display:"flex",gap:"14px",
+        cursor:"pointer",transition:"all 0.18s",
+      }}>
+
+      {/* Rank badge */}
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"6px",flexShrink:0}}>
+        <div style={{width:"32px",height:"32px",borderRadius:"50%",flexShrink:0,
+          background:isTop?"linear-gradient(135deg,#7c3aed,#8b5cf6)":"rgba(255,255,255,0.06)",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:"12px",fontWeight:800,color:isTop?"#fff":"#64748b",
+          fontFamily:"'JetBrains Mono',monospace",
+          boxShadow:isTop?"0 2px 8px rgba(124,58,237,0.4)":"none"}}>{p.rank}</div>
+        {isTop && <div style={{fontSize:"14px"}}>🥇</div>}
+      </div>
+
+      {/* Main content */}
+      <div style={{flex:1,minWidth:0}}>
+
+        {/* Top row: address + price + score ring */}
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"10px",marginBottom:"12px"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:"15px",fontWeight:700,color:"#f1f5f9",marginBottom:"3px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.address}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"8px",fontSize:"11px",color:"#64748b",fontFamily:"'JetBrains Mono',monospace"}}>
+              <span>📍 ZIP {p.zip_code}</span>
+              <span>🛏️ {p.beds}bd/{p.baths}ba</span>
+              <span>📐 {p.sqft?.toLocaleString()} sqft</span>
+              <span>{domIcon(p.dom)} {p.dom}d listed</span>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"6px",flexShrink:0}}>
+            <div style={{fontSize:"19px",fontWeight:800,color:"#8b5cf6",fontFamily:"'JetBrains Mono',monospace"}}>${p.price.toLocaleString()}</div>
+            <div style={{fontSize:"11px",color:"#64748b"}}>🏠 Est. ${p.est_rent.toLocaleString()}/mo</div>
+          </div>
+        </div>
+
+        {/* Metrics row + score ring */}
+        <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"10px"}}>
+          {/* Key metrics */}
+          <div style={{display:"flex",gap:"14px",flex:1,flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:"11px",color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"2px"}}>{capRateIcon(p.cap_rate)} Cap Rate</div>
+              <div style={{fontSize:"16px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:crC}}>{p.cap_rate}%</div>
+            </div>
+            <div>
+              <div style={{fontSize:"11px",color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"2px"}}>{cashFlowIcon(p.cash_flow)} Cash Flow</div>
+              <div style={{fontSize:"16px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:cfC}}>${p.cash_flow}/mo</div>
+            </div>
+            <div>
+              <div style={{fontSize:"11px",color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"2px"}}>📊 GRM</div>
+              <div style={{fontSize:"16px",fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:"#8b5cf6"}}>{p.grm}x</div>
+            </div>
+          </div>
+          {/* Score ring */}
+          <ScoreRing score={p.ai_score}/>
+        </div>
+
+        {/* Tags */}
+        <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginBottom:"10px"}}>
+          {p.tags.map(t=><span key={t} style={{padding:"3px 8px",borderRadius:"5px",fontSize:"11px",fontWeight:600,...tagStyle(t)}}>{t}</span>)}
+        </div>
+
+        {/* Score bar */}
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
+          <div style={{flex:1,height:"5px",background:"rgba(255,255,255,0.06)",borderRadius:"3px",overflow:"hidden"}}>
+            <div className="score-bar-fill" style={{height:"100%",borderRadius:"3px",background:`linear-gradient(90deg,#7c3aed,${scoreColor})`,width:`${p.ai_score}%`}}/>
+          </div>
+          <div style={{fontSize:"11px",color:"#64748b",fontFamily:"'JetBrains Mono',monospace",fontWeight:700,whiteSpace:"nowrap"}}>NetFlow {p.ai_score}/100</div>
+        </div>
+
+        {/* Chat hint */}
+        <div style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"11px",fontWeight:600,color:selected?"#a78bfa":"#475569"}}>
+          <span>💬</span>{selected?"AI Analyst open — ask anything →":"Click to open AI Property Analyst"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function PropertyGrid({properties,onSelectProperty,selectedProperty}:Props){
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+      {properties.map(p=><PropertyCard key={p.address} p={p} onSelect={()=>onSelectProperty(p)} selected={selectedProperty?.address===p.address}/>)}
+    </div>
+  );
+}

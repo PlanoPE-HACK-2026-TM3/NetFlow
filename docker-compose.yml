@@ -1,0 +1,135 @@
+# =============================================================================
+# NetFlow — Docker Compose stack
+#
+# Services:
+#   ollama        Local LLM server (persists models in named volume)
+#   ollama-init   One-shot sidecar that pulls llama3 on first boot, then exits
+#   backend       FastAPI on :8000
+#   frontend      Next.js on :3000
+#
+# Dependency chain:  ollama -> ollama-init -> backend -> frontend
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Ollama — local LLM inference server
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: netflow-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      # Model weights live here — surviving container restarts avoids a
+      # multi-GB re-pull every time.
+      - ollama_data:/root/.ollama
+    networks:
+      - netflow-net
+    healthcheck:
+      # `ollama list` exits 0 only once the HTTP API is actually up.
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Ollama model puller — runs once, pulls llama3, exits.
+  # Backend waits for this to complete before starting, so the first
+  # /api/search request doesn't trigger a 4.7 GB cold pull.
+  # ---------------------------------------------------------------------------
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: netflow-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      # Point the ollama CLI at the sibling container instead of 127.0.0.1.
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "[ollama-init] Checking whether llama3 is already cached..."
+        if ollama list | awk 'NR>1 {print $$1}' | grep -q '^llama3'; then
+          echo "[ollama-init] llama3 already present — skipping pull."
+        else
+          echo "[ollama-init] Pulling llama3 (~4.7 GB, first run only)..."
+          ollama pull llama3
+          echo "[ollama-init] Pull complete."
+        fi
+    networks:
+      - netflow-net
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Backend — FastAPI + LangChain
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: netflow-backend:latest
+    container_name: netflow-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # These override whatever is in .env so the container always talks
+      # to the Ollama service by its Docker DNS name, never to localhost.
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3
+      HOST: 0.0.0.0
+      PORT: "8000"
+      ALLOWED_ORIGINS: http://localhost:3000
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+    networks:
+      - netflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Next.js 16
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle at build time. Must be the URL the
+        # USER'S BROWSER can reach — i.e. the host-published port, NOT the
+        # internal Docker DNS name.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    image: netflow-frontend:latest
+    container_name: netflow-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: production
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - netflow-net
+
+# =============================================================================
+networks:
+  netflow-net:
+    driver: bridge
+
+volumes:
+  ollama_data:
+    driver: local

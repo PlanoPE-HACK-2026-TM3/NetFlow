@@ -1,0 +1,45 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+.env
+backend/.env
+*.log
+
+# ── Node / Next.js ────────────────────────────────────────────
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/.env.local
+.npm
+
+# ── Secrets ───────────────────────────────────────────────────
+*.key
+*.pem
+*.p12
+secrets/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# ── Logs ──────────────────────────────────────────────────────
+/tmp/netflow-*.log
+*.log
+
+# ── LangSmith local trace cache ───────────────────────────────
+.langchain/

@@ -1,0 +1,33 @@
+export interface SearchParams {
+  zip_code: string;
+  budget: number;
+  property_type: "SFH" | "Multi" | "Condo" | "Townhouse";
+  min_beds: number;
+  strategy: "LTR" | "STR" | "BRRRR" | "Flip";
+}
+
+export interface Property {
+  rank: number;
+  address: string;
+  zip_code: string;
+  price: number;
+  est_rent: number;
+  cap_rate: number;
+  cash_flow: number;
+  grm: number;
+  dom: number;
+  ai_score: number;
+  tags: string[];
+  beds: number;
+  baths: number;
+  sqft: number;
+  isTop?: boolean;
+}
+
+export interface SearchResult {
+  properties: Property[];
+  mortgage_rate: number;
+  market_summary: string;
+  zip_code: string;
+  search_params: SearchParams;
+}
