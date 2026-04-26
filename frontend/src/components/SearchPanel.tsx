@@ -526,7 +526,7 @@ export default function SearchPanel({ onSearch, loading, statusMsg, searchHistor
             <button onClick={()=>setRecentOpen(v=>!v)} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", background:"none", border:"none", cursor:"pointer", padding:"2px 6px 4px", borderRadius:"6px" }}
               onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background="rgba(255,255,255,0.05)"}
               onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background="transparent"}>
-              <span style={{ fontSize:"11px", fontWeight:600, color:D.text3, letterSpacing:"0.6px" }}>Recent</span>
+              <span style={{ fontSize:"11px", fontWeight:700, color:"var(--pri-hi)", letterSpacing:"0.6px", background:"rgba(37,99,235,.15)", padding:"2px 8px", borderRadius:"10px", border:"1px solid rgba(37,99,235,.3)" }}>Recent</span>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke={D.text3} strokeWidth={1.8} strokeLinecap="round"
                 style={{ transform:recentOpen?"rotate(0deg)":"rotate(-90deg)", transition:"transform 0.18s" }}>
                 <polyline points="2,4 6,8 10,4"/>

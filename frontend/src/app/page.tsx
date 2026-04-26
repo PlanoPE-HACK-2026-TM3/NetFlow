@@ -364,6 +364,7 @@ export default function Home() {
                 zip_code: ev.zip_code ?? "",
                 location_display: ev.location_display ?? "",
                 request_id: ev.request_id ?? "",
+                run_id: ev.run_id ?? "",
                 market_summary: partial.market_summary ?? "",
                 search_params: partial.search_params ?? params,
               };
@@ -525,12 +526,6 @@ export default function Home() {
           {/* Results */}
           {result&&(
             <>
-              {/* Query badge row */}
-              <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                {lastQuery&&<div style={{padding:"3px 11px",borderRadius:"20px",background:"rgba(37,99,235,.12)",border:"1px solid rgba(37,99,235,.35)",fontSize:"12px",fontWeight:600,color:"var(--pri-hi)",display:"flex",alignItems:"center",gap:"4px"}}>✨ "{lastQuery}"</div>}
-                <div style={{fontSize:"11px",color:"var(--t3)"}}>{result.location_display||result.zip_code} · {new Date().toLocaleDateString()}</div>
-              </div>
-
               {/* Tab bar + title */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
                 <div>
@@ -555,7 +550,8 @@ export default function Home() {
                       onSelectProperty={handleSelectProp}
                       selectedProperty={chatProp}
                       favorites={favAddresses}
-                      onToggleFavorite={toggleFavorite}/>
+                      onToggleFavorite={toggleFavorite}
+                      runId={result.run_id}/>
                   )}
                   {chatProp&&(
                     <div style={{display:"flex",gap:"14px",alignItems:"flex-start",flexWrap:"wrap"}}>
@@ -564,7 +560,8 @@ export default function Home() {
                           onSelectProperty={handleSelectPropToggle}
                           selectedProperty={chatProp}
                           favorites={favAddresses}
-                          onToggleFavorite={toggleFavorite}/>
+                          onToggleFavorite={toggleFavorite}
+                          runId={result.run_id}/>
                       </div>
                       <div style={{flex:"1 1 340px",minWidth:"320px",height:"calc(100dvh - 80px)",position:"sticky",top:"68px",overflowY:"hidden",display:"flex",flexDirection:"column"}}>
                         <PropertyChat property={chatProp} mortgageRate={result.mortgage_rate||7.2} onClose={()=>{setChatProp(null);log.ui("Chat closed");}}/>
@@ -591,7 +588,8 @@ export default function Home() {
                       onSelectProperty={handleSelectProp}
                       selectedProperty={chatProp}
                       favorites={favAddresses}
-                      onToggleFavorite={toggleFavorite}/>
+                      onToggleFavorite={toggleFavorite}
+                      runId={result.run_id}/>
               )}
             </>
           )}

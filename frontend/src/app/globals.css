@@ -195,6 +195,11 @@
 .tip-wrap.tip-open .tip-box { opacity: 1; }
 .tip-right .tip-box { left: auto; right: 0; transform: none; }
 .tip-right .tip-box::after { left: auto; right: 14px; transform: none; }
+.tip-left  .tip-box { left: 0; right: auto; transform: none; }
+.tip-left  .tip-box::after { left: 14px; right: auto; transform: none; }
+@media (max-width: 480px) {
+  .tip-box { width: 180px; }
+}
 
 /* ── App shell ─────────────────────────────────────────────── */
 .app-shell    { display: flex; flex-direction: column; min-height: 100dvh; }

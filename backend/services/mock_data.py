@@ -79,15 +79,15 @@ def mock_listings(
 
 
 def mock_rent_estimate(price: int, beds: int, baths: float) -> int:
-    """Rough rent: ~0.50-0.65% of purchase price per month."""
+    """Rough rent: ~0.65-0.80% of purchase price per month (current TX market)."""
     base         = price * _rng_val(price)
-    bedroom_bump = (beds - 2) * 130
-    bath_bump    = int(baths * 65)
-    return max(900, int((base + bedroom_bump + bath_bump) // 10 * 10))
+    bedroom_bump = (beds - 2) * 150
+    bath_bump    = int(baths * 75)
+    return max(1000, int((base + bedroom_bump + bath_bump) // 10 * 10))
 
 
 def _rng_val(seed_val: int) -> float:
-    return 0.005 + (seed_val % 1000) / 1_000_000 * 1500
+    return 0.0065 + (seed_val % 1000) / 1_000_000 * 1500
 
 
 def mock_market_stats(zip_code: str) -> dict[str, Any]:
