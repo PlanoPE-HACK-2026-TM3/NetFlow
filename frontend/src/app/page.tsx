@@ -526,12 +526,6 @@ export default function Home() {
           {/* Results */}
           {result&&(
             <>
-              {/* Query badge row */}
-              <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                {lastQuery&&<div style={{padding:"3px 11px",borderRadius:"20px",background:"rgba(37,99,235,.12)",border:"1px solid rgba(37,99,235,.35)",fontSize:"12px",fontWeight:600,color:"var(--pri-hi)",display:"flex",alignItems:"center",gap:"4px"}}>✨ "{lastQuery}"</div>}
-                <div style={{fontSize:"11px",color:"var(--t3)"}}>{result.location_display||result.zip_code} · {new Date().toLocaleDateString()}</div>
-              </div>
-
               {/* Tab bar + title */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
                 <div>

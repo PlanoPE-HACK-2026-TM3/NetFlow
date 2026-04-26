@@ -115,9 +115,6 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
   const [vote, setVote] = useState<"up" | "down" | null>(null);
   const [voteSending, setVoteSending] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
-  const [showCommentBox, setShowCommentBox] = useState(false);
-  const [comment, setComment] = useState("");
-  const [savedComment, setSavedComment] = useState("");
 
   // Stable id so reposting overwrites the previous feedback row in LangSmith
   const feedbackId = useMemo(
@@ -125,10 +122,7 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
     [runId, p.address],
   );
 
-  const sendFeedback = useCallback(async (
-    v: "up" | "down",
-    note?: string,
-  ) => {
+  const sendFeedback = useCallback(async (v: "up" | "down") => {
     if (!runId || voteSending) return;
     setVoteSending(true);
     setVoteError(null);
@@ -143,13 +137,11 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
           rank:        p.rank,
           address:     p.address,
           score:       p.ai_score,
-          comment:     note ?? undefined,
         }),
       });
       if (res.ok) {
         setVote(v);
-        if (note !== undefined) setSavedComment(note);
-        log.ui("Feedback sent", { rank: p.rank, vote: v, hasNote: !!note });
+        log.ui("Feedback sent", { rank: p.rank, vote: v });
       } else {
         const txt = await res.text().catch(() => "");
         setVoteError(`Failed (${res.status})`);
@@ -164,21 +156,9 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
   }, [runId, voteSending, feedbackId, p.rank, p.address, p.ai_score]);
 
   const handleVoteClick = useCallback((v: "up" | "down") => {
-    // Toggle off if clicking the same vote, otherwise switch
-    if (vote === v) {
-      setVote(null);
-      setShowCommentBox(false);
-      return;
-    }
-    sendFeedback(v, savedComment || undefined);
-  }, [vote, sendFeedback, savedComment]);
-
-  const submitComment = useCallback(() => {
-    const trimmed = comment.trim();
-    if (!vote) return;
-    sendFeedback(vote, trimmed);
-    setShowCommentBox(false);
-  }, [comment, vote, sendFeedback]);
+    if (vote === v) { setVote(null); return; }
+    sendFeedback(v);
+  }, [vote, sendFeedback]);
 
   const [dark, mid, accent] = PALETTES[(p.rank - 1) % 5];
   const { c: scoreC, label: scoreLabel } = scoreInfo(p.ai_score);
@@ -426,8 +406,8 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
               alignItems:"center", gap:10,
             }}>
               {p.confidence_score != null && (
-                <QualityPill label="Conf" value={p.confidence_score} align="left"
-                  tip="Confidence — composite trust signal blending groundedness, correctness, and risk."/>
+                <QualityPill label="AI Confidence" value={p.confidence_score} align="left"
+                  tip="AI Confidence — composite trust signal blending groundedness, correctness, and risk."/>
               )}
               {runId ? (
                 <span style={{
@@ -477,77 +457,10 @@ const PropertyCard = memo(function PropertyCard({ p, onSelect, selected, isFavor
                     }}>
                     👎
                   </button>
-                  <button
-                    disabled={!vote || voteSending}
-                    onClick={() => { setComment(savedComment); setShowCommentBox(s => !s); }}
-                    title={savedComment ? "Edit note" : "Add note"}
-                    aria-label="Add note"
-                    style={{
-                      width:30, height:28, borderRadius:7,
-                      cursor: (!vote || voteSending) ? "not-allowed" : "pointer",
-                      border:`1px solid ${showCommentBox ? "var(--pri)" : "var(--bd)"}`,
-                      background: showCommentBox ? "var(--pri-lo)" : "transparent",
-                      color: vote ? "var(--t2)" : "var(--t3)",
-                      fontSize:12, transition:"all .15s",
-                      opacity: vote ? 1 : 0.45,
-                    }}>
-                    💬
-                  </button>
                 </div>
               )}
             </div>
 
-            {savedComment && !showCommentBox && (
-              <div style={{
-                fontSize:11, color:"var(--t2)", lineHeight:1.5,
-                padding:"6px 8px", borderRadius:6,
-                background:"var(--bg)", border:"1px dashed var(--bd)",
-                wordBreak:"break-word",
-              }}>
-                <span style={{ color:"var(--t3)", fontWeight:600 }}>Your note: </span>
-                {savedComment}
-              </div>
-            )}
-
-            {showCommentBox && (
-              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                <textarea
-                  value={comment}
-                  onChange={e => setComment(e.target.value)}
-                  placeholder="Add a few words of context (optional)…"
-                  maxLength={280}
-                  rows={2}
-                  style={{
-                    width:"100%", resize:"vertical",
-                    fontFamily:"inherit", fontSize:12, lineHeight:1.45,
-                    padding:"8px 10px", borderRadius:7,
-                    background:"var(--bg)", color:"var(--t1)",
-                    border:"1px solid var(--bd)", outline:"none",
-                  }}/>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:10, color:"var(--t3)" }}>{comment.length}/280</span>
-                  <div style={{ display:"flex", gap:6 }}>
-                    <button onClick={() => { setShowCommentBox(false); setComment(savedComment); }}
-                      style={{
-                        padding:"5px 10px", borderRadius:6, fontSize:11, fontWeight:600,
-                        border:"1px solid var(--bd)", background:"transparent",
-                        color:"var(--t3)", cursor:"pointer",
-                      }}>
-                      Cancel
-                    </button>
-                    <button onClick={submitComment} disabled={voteSending}
-                      style={{
-                        padding:"5px 12px", borderRadius:6, fontSize:11, fontWeight:700,
-                        border:"none", color:"#fff", cursor:voteSending?"wait":"pointer",
-                        background:"linear-gradient(135deg,#2563eb,#1d4ed8)",
-                        opacity: voteSending ? 0.6 : 1,
-                      }}>
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 

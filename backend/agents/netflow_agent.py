@@ -347,9 +347,13 @@ def compute_financials(listing: dict, mortgage_rate: float) -> dict:
     pn            = (1 + r) ** 360
     pi            = loan * (r * pn) / (pn - 1) if r > 0 else loan / 360
     piti          = pi + price * 0.015 / 12
-    cash_flow     = int(rent - piti - rent * 0.35)
+    # Correct formula: PI-only for debt service + 35% all-in expense ratio
+    # (the 35% already covers taxes, insurance, vacancy, repairs, mgmt).
+    # Old formula erroneously subtracted PITI (which included T&I) *and*
+    # rent*0.35 (which also covers T&I), double-counting ~$300-400/mo.
+    cash_flow     = int(rent * 0.65 - pi)
     grm           = round(price / (rent*12), 1) if rent > 0 else 0.0
-    coc           = round(((rent - piti - rent*0.35)*12) / (price*0.20)*100, 1)
+    coc           = round((cash_flow * 12) / (price * 0.20) * 100, 1)
     break_even    = int(piti * 1.15)
     return {
         **listing,
@@ -1449,6 +1453,12 @@ class NetFlowAgent:
             enriched = compute_financials(listing, mortgage_rate)
             enriched["_idx"] = i
             ctx.enriched.append(enriched)
+
+        # Drop negative cash-flow properties — they are not investable at this
+        # budget/rate combination and should never appear in the ranked output.
+        pos = [e for e in ctx.enriched if e.get("cash_flow", 0) >= 0]
+        if pos:  # guard: keep all if every property is negative (show best of bad)
+            ctx.enriched = pos
 
         await self._risk_agent.run(ctx, llm)
         ctx.stage_times["risk_advisor"] = round(time.perf_counter()-t1, 3)

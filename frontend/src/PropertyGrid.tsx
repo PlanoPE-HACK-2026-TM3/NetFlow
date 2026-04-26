@@ -277,7 +277,7 @@ function PropertyCard({ p, onSelect, selected }:{ p:Property; onSelect:()=>void;
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"10px"}}>
           <QualityScorePill label="Grounded" score={groundedness}/>
           <QualityScorePill label="Correct" score={correctness}/>
-          <QualityScorePill label="Conf" score={confidence}/>
+          <QualityScorePill label="AI Confidence" score={confidence}/>
         </div>
 
         {/* ── Row 5: Sqft + action buttons ── */}
