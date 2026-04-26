@@ -1,0 +1,6 @@
+# NetFlow — test-only dependencies
+# Install on top of backend/requirements.txt:
+#     pip install -r tests/requirements-test.txt
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0

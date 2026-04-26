@@ -11,26 +11,29 @@ export interface SearchParams {
 }
 
 export interface Property {
-  rank:        number;
-  address:     string;
-  zip_code:    string;
-  price:       number;
-  est_rent:    number;
-  cap_rate:    number;
-  cash_flow:   number;
-  grm:         number;
-  dom:         number;
-  ai_score:    number;
-  tags:        string[];
-  beds:        number;
-  baths:       number;
-  sqft:        number;
-  year_built?: number;
-  lot_size?:   number;
-  mls_id?:     string;
-  listing_url?:string;
-  map_query?:  string;
-  photo_url?:  string;
+  rank:             number;
+  address:          string;
+  zip_code:         string;
+  price:            number;
+  est_rent:         number;
+  cap_rate:         number;
+  cash_flow:        number;
+  grm:              number;
+  dom:              number;
+  ai_score:         number;
+  tags:             string[];
+  beds:             number;
+  baths:            number;
+  sqft:             number;
+  year_built?:      number;
+  lot_size?:        number;
+  mls_id?:          string;
+  listing_url?:     string;
+  map_query?:       string;
+  photo_url?:       string;
+  strategy_note?:   string;
+  risk_level?:      string;
+  llm_correctness?: number;  // 0-100: LLM score vs rule-baseline agreement
 }
 
 export interface SearchResult {

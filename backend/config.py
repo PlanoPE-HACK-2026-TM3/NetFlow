@@ -30,24 +30,8 @@ RENTCAST_API_KEY:  str = os.getenv("RENTCAST_API_KEY", "")
 FRED_API_KEY:      str = os.getenv("FRED_API_KEY", "")
 
 # ── LangSmith ────────────────────────────────────────────────
-# Accept either naming convention. Newer docs use LANGSMITH_*, older use
-# LANGCHAIN_*. Whichever the user sets in .env, we honor it. Quotes are
-# stripped because some users wrap values in "..." and python-dotenv
-# used to not strip them, which confused the SDK.
-def _clean(val: str) -> str:
-    return val.strip().strip('"').strip("'")
-
-LANGCHAIN_API_KEY: str = _clean(
-    os.getenv("LANGCHAIN_API_KEY") or os.getenv("LANGSMITH_API_KEY") or ""
-)
-LANGCHAIN_PROJECT: str = _clean(
-    os.getenv("LANGCHAIN_PROJECT") or os.getenv("LANGSMITH_PROJECT") or "netflow-hackathon"
-)
-LANGCHAIN_ENDPOINT: str = _clean(
-    os.getenv("LANGCHAIN_ENDPOINT")
-    or os.getenv("LANGSMITH_ENDPOINT")
-    or "https://api.smith.langchain.com"
-)
+LANGCHAIN_API_KEY: str = os.getenv("LANGCHAIN_API_KEY", "")
+LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "netflow-hackathon")
 
 # ── Ollama ───────────────────────────────────────────────────
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -72,39 +56,18 @@ ALLOWED_ORIGINS: list[str] = os.getenv(
 ).split(",")
 
 # ── Step 2: Write all four LangSmith vars into os.environ ────
-# NOTE on env var names:
-#   - LangChain (classic) reads LANGCHAIN_TRACING_V2
-#   - Newer LangSmith SDK (>=0.1.x) reads LANGSMITH_TRACING  (no _V2 suffix!)
-#   Both must be set because different code paths within the same install
-#   check different prefixes.
 if LANGCHAIN_API_KEY:
     os.environ["LANGCHAIN_API_KEY"]    = LANGCHAIN_API_KEY
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"]    = LANGCHAIN_PROJECT
-    os.environ["LANGCHAIN_ENDPOINT"]   = LANGCHAIN_ENDPOINT
-    os.environ["LANGSMITH_TRACING"]    = "true"   # NOT _V2 — that was a classic traditional version
+    os.environ["LANGCHAIN_ENDPOINT"]   = "https://api.smith.langchain.com"
+    os.environ["LANGSMITH_TRACING_V2"] = "true"   # langsmith also checks LANGSMITH_ prefix
     os.environ["LANGSMITH_API_KEY"]    = LANGCHAIN_API_KEY
     os.environ["LANGSMITH_PROJECT"]    = LANGCHAIN_PROJECT
-    os.environ["LANGSMITH_ENDPOINT"]   = LANGCHAIN_ENDPOINT
-    # Stderr breadcrumb — shows up in `docker compose logs backend` so
-    # you can verify tracing is wired up without poking at the SDK.
-    import sys
-    print(
-        f"[config] LangSmith tracing ENABLED | project={LANGCHAIN_PROJECT} "
-        f"| endpoint={LANGCHAIN_ENDPOINT} | key=...{LANGCHAIN_API_KEY[-6:]}",
-        file=sys.stderr,
-        flush=True,
-    )
+    os.environ["LANGSMITH_ENDPOINT"]   = "https://api.smith.langchain.com"
 else:
     os.environ["LANGCHAIN_TRACING_V2"] = "false"
-    os.environ["LANGSMITH_TRACING"]    = "false"
-    import sys
-    print(
-        "[config] LangSmith tracing DISABLED "
-        "(set LANGSMITH_API_KEY or LANGCHAIN_API_KEY to enable)",
-        file=sys.stderr,
-        flush=True,
-    )
+    os.environ["LANGSMITH_TRACING_V2"] = "false"
 
 # ── Step 3: Bust the lru_cache so langsmith re-reads os.environ ──
 # get_env_var() uses @lru_cache — if langsmith was already imported

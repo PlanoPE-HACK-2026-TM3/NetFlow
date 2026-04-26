@@ -435,8 +435,9 @@ def _extract_params(text: str) -> dict:
                 result["zip_code"] = z
                 result["location"] = ca.group(1).strip()
 
-    # Budget
-    bm = re.findall(r"\$?\s*([\d,]+)\s*([kKmM]?)\b", t)
+    # Budget — strip ZIP-like 5-digit numbers first to avoid false matches
+    budget_text = re.sub(r"\b\d{5}\b", "", t)
+    bm = re.findall(r"\$?\s*([\d,]+)\s*([kKmM]?)\b", budget_text)
     for raw, suf in bm:
         v = int(raw.replace(",", ""))
         if suf.lower() == "k":   v *= 1_000

@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>NetFlow Runtime Architecture</title>
+  <desc>Three tiers: Next.js frontend on top, FastAPI backend container holding a UserAgent security gateway, the NetFlowAgent orchestrator, three sub-agents and a service layer in the middle, and external dependencies — Ollama, RentCast API, FRED API, LangSmith — on the bottom.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1 L8 5 L2 9" fill="none" stroke="#444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .label-title { font-size: 14px; font-weight: 500; }
+      .label-sub   { font-size: 12px; font-weight: 400; }
+      .label-hdr   { font-size: 16px; font-weight: 500; }
+      .label-section { font-size: 13px; font-weight: 500; fill: #444; }
+    </style>
+  </defs>
+
+  <!-- Title -->
+  <text x="450" y="32" text-anchor="middle" class="label-hdr" fill="#1a1a1a">NetFlow runtime architecture</text>
+  <text x="450" y="52" text-anchor="middle" class="label-sub" fill="#666">FastAPI backend, 4-agent pipeline, local Ollama LLM, external data APIs</text>
+
+  <!-- =============================================================== -->
+  <!-- Tier 1 — Frontend                                               -->
+  <!-- =============================================================== -->
+  <g>
+    <rect x="340" y="76" width="220" height="56" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+    <text x="450" y="100" text-anchor="middle" class="label-title" fill="#0C447C">Next.js frontend</text>
+    <text x="450" y="120" text-anchor="middle" class="label-sub"   fill="#185FA5">React 18, TypeScript, port 3000</text>
+  </g>
+
+  <!-- Frontend → Backend -->
+  <line x1="450" y1="132" x2="450" y2="170" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- =============================================================== -->
+  <!-- Tier 2 — FastAPI backend container                              -->
+  <!-- =============================================================== -->
+  <rect x="40" y="170" width="820" height="380" rx="14" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+  <text x="450" y="196" text-anchor="middle" class="label-section">FastAPI backend, port 8000  ·  Python 3.11+</text>
+
+  <!-- UserAgent — security gateway -->
+  <g>
+    <rect x="60" y="216" width="780" height="56" rx="8" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+    <text x="450" y="240" text-anchor="middle" class="label-title" fill="#633806">User agent — security gateway</text>
+    <text x="450" y="260" text-anchor="middle" class="label-sub"   fill="#854F0B">Sanitise · classify intent · rate-limit · 25 injection patterns · audit log</text>
+  </g>
+
+  <line x1="450" y1="272" x2="450" y2="288" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Orchestrator -->
+  <g>
+    <rect x="60" y="288" width="780" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+    <text x="450" y="312" text-anchor="middle" class="label-title" fill="#3C3489">NetFlowAgent — orchestrator</text>
+    <text x="450" y="332" text-anchor="middle" class="label-sub"   fill="#534AB7">Routes pipeline · gates LLM use · builds AgentContext · @traceable for LangSmith</text>
+  </g>
+
+  <!-- Orchestrator → 3 agents (fan-out) -->
+  <line x1="190" y1="344" x2="190" y2="364" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="344" x2="450" y2="364" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="710" y1="344" x2="710" y2="364" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 3 sub-agents -->
+  <g>
+    <rect x="60"  y="364" width="260" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+    <text x="190" y="388" text-anchor="middle" class="label-title" fill="#3C3489">Market analyst</text>
+    <text x="190" y="408" text-anchor="middle" class="label-sub"   fill="#534AB7">Rate · market stats · narrative</text>
+  </g>
+  <g>
+    <rect x="320" y="364" width="260" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+    <text x="450" y="388" text-anchor="middle" class="label-title" fill="#3C3489">Property scorer</text>
+    <text x="450" y="408" text-anchor="middle" class="label-sub"   fill="#534AB7">LLM batch scoring · strategy rerank</text>
+  </g>
+  <g>
+    <rect x="580" y="364" width="260" height="56" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+    <text x="710" y="388" text-anchor="middle" class="label-title" fill="#3C3489">Risk advisor</text>
+    <text x="710" y="408" text-anchor="middle" class="label-sub"   fill="#534AB7">Risk profile · LLM memo</text>
+  </g>
+
+  <!-- Resilience / service layer -->
+  <text x="60" y="450" class="label-section">Service layer (cache + mock fallback)</text>
+  <g>
+    <rect x="60"  y="462" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+    <text x="190" y="486" text-anchor="middle" class="label-title" fill="#085041">RentCast service</text>
+    <text x="190" y="506" text-anchor="middle" class="label-sub"   fill="#0F6E56">15-min cache · mock fallback</text>
+  </g>
+  <g>
+    <rect x="320" y="462" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+    <text x="450" y="486" text-anchor="middle" class="label-title" fill="#085041">FRED service</text>
+    <text x="450" y="506" text-anchor="middle" class="label-sub"   fill="#0F6E56">1-hr cache · mock fallback</text>
+  </g>
+  <g>
+    <rect x="580" y="462" width="260" height="56" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+    <text x="710" y="486" text-anchor="middle" class="label-title" fill="#085041">Mock data generator</text>
+    <text x="710" y="506" text-anchor="middle" class="label-sub"   fill="#0F6E56">Seeded by ZIP, deterministic</text>
+  </g>
+
+  <!-- Backend → Externals -->
+  <line x1="450" y1="550" x2="450" y2="588" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- =============================================================== -->
+  <!-- Tier 3 — External dependencies                                  -->
+  <!-- =============================================================== -->
+  <text x="40" y="606" class="label-section">External dependencies (network calls)</text>
+
+  <g>
+    <rect x="40"  y="616" width="200" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+    <text x="140" y="640" text-anchor="middle" class="label-title" fill="#444441">Ollama, port 11434</text>
+    <text x="140" y="660" text-anchor="middle" class="label-sub"   fill="#5F5E5A">Local LLM (llama3)</text>
+  </g>
+  <g>
+    <rect x="250" y="616" width="200" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+    <text x="350" y="640" text-anchor="middle" class="label-title" fill="#444441">RentCast API</text>
+    <text x="350" y="660" text-anchor="middle" class="label-sub"   fill="#5F5E5A">Listings and rents</text>
+  </g>
+  <g>
+    <rect x="460" y="616" width="200" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+    <text x="560" y="640" text-anchor="middle" class="label-title" fill="#444441">FRED API</text>
+    <text x="560" y="660" text-anchor="middle" class="label-sub"   fill="#5F5E5A">30-yr mortgage rate</text>
+  </g>
+  <g>
+    <rect x="670" y="616" width="190" height="56" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+    <text x="765" y="640" text-anchor="middle" class="label-title" fill="#444441">LangSmith</text>
+    <text x="765" y="660" text-anchor="middle" class="label-sub"   fill="#5F5E5A">Tracing (optional)</text>
+  </g>
+
+  <!-- Legend (right margin, bottom) -->
+  <g transform="translate(0, 696)">
+    <rect x="40"  y="0" width="14" height="10" rx="2" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+    <text x="60"  y="9" class="label-sub" fill="#666">Client</text>
+    <rect x="120" y="0" width="14" height="10" rx="2" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+    <text x="140" y="9" class="label-sub" fill="#666">Security gate</text>
+    <rect x="220" y="0" width="14" height="10" rx="2" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+    <text x="240" y="9" class="label-sub" fill="#666">Agent (LLM-aware)</text>
+    <rect x="370" y="0" width="14" height="10" rx="2" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+    <text x="390" y="9" class="label-sub" fill="#666">Resilience layer</text>
+    <rect x="500" y="0" width="14" height="10" rx="2" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+    <text x="520" y="9" class="label-sub" fill="#666">External / process boundary</text>
+  </g>
+</svg>

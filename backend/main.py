@@ -115,8 +115,10 @@ def parse_prompt_to_params(text: str) -> dict:
             zip_code = CITY_ZIP.get(city_alone.group(1).lower(), "")
 
     # ── Budget ────────────────────────────────────────────────
+    # Strip ZIP-like 5-digit numbers first so they aren't mistaken for a budget
+    budget_text  = re.sub(r"\b\d{5}\b", "", t)
     budget = 450000
-    b_candidates = re.findall(r"\$?([\d,]+)\s*([kKmM]?)\b", t)
+    b_candidates = re.findall(r"\$?([\d,]+)\s*([kKmM]?)\b", budget_text)
     for raw, suffix in b_candidates:
         val = int(raw.replace(",", ""))
         if suffix.lower() == "k":   val *= 1000
@@ -299,43 +301,81 @@ agent    = NetFlowAgent()
 
 class SearchRequest(BaseModel):
     zip_code:      str = ""
+    city:          str = ""
+    state:         str = ""
     location:      str = ""
     prompt_text:   str = ""
     budget:        int = 450000
     property_type: str = "SFH"
     min_beds:      int = 3
     strategy:      str = "LTR"
-    session_id:    str = ""   # optional; used for rate limiting
+    session_id:    str = ""
 
     def resolve(self) -> dict:
-        result = {
-            "zip_code":        self.zip_code.strip(),
-            "budget":          self.budget,
-            "property_type":   self.property_type,
-            "min_beds":        self.min_beds,
-            "strategy":        self.strategy,
-            "location_display": self.location or self.zip_code,
-        }
+        zip_code  = self.zip_code.strip()
+        city      = self.city.strip()
+        state     = self.state.strip().upper()
+        budget    = self.budget
+        prop_type = self.property_type
+        min_beds  = self.min_beds
+        strategy  = self.strategy
+
+        # Explicit city override → resolve ZIP from lookup table
+        if city and not zip_code:
+            zip_code = CITY_ZIP.get(city.lower(), "")
+
+        # Build location display from explicit city/state
+        if city and state:
+            loc = f"{city}, {state}" + (f" {zip_code}" if zip_code else "")
+        elif city:
+            loc = f"{city} {zip_code}".strip()
+        elif zip_code:
+            loc = zip_code
+        else:
+            loc = self.location or ""
+
+        # Parse prompt — only fill fields not already explicitly overridden
         if self.prompt_text.strip():
             parsed = parse_prompt_to_params(self.prompt_text)
-            if not result["zip_code"] or result["zip_code"] == "75070":
-                result["zip_code"] = parsed["zip_code"]
-            if result["budget"] == 450000 and parsed["budget"] != 450000:
-                result["budget"] = parsed["budget"]
-            if result["property_type"] == "SFH":
-                result["property_type"] = parsed["property_type"]
-            if result["min_beds"] == 3:
-                result["min_beds"] = parsed["min_beds"]
-            if result["strategy"] == "LTR":
-                result["strategy"] = parsed["strategy"]
-            result["location_display"] = parsed["location_display"]
-        if not result["zip_code"]:
-            result["zip_code"] = "75070"
-        return result
+            if not zip_code or zip_code == "75070":
+                zip_code = parsed["zip_code"]
+            # Always use the prompt's budget when it explicitly states one.
+            # The frontend may send a stale budget from a prior search; re-parsing
+            # the prompt_text is the authoritative source.
+            if parsed["budget"] != 450000:
+                budget = parsed["budget"]
+            if prop_type == "SFH":
+                prop_type = parsed["property_type"]
+            if min_beds == 3:
+                min_beds = parsed["min_beds"]
+            if strategy == "LTR":
+                strategy = parsed["strategy"]
+            if not city:
+                loc = parsed["location_display"]
+
+        return {
+            "zip_code":         zip_code or "75070",
+            "budget":           budget,
+            "property_type":    prop_type,
+            "min_beds":         min_beds,
+            "strategy":         strategy,
+            "location_display": loc or zip_code or "75070",
+        }
 
 
 class ParseRequest(BaseModel):
     prompt: str
+
+
+class FeedbackRequest(BaseModel):
+    address:        str
+    mls_id:         str = ""
+    original_score: int
+    vote:           str   # "up" | "down"
+    notes:          str = ""
+
+
+_hitl_log: list[dict] = []
 
 
 # ── Routes ────────────────────────────────────────────────────
@@ -496,7 +536,7 @@ async def search_stream(req: SearchRequest):
                 # (only override if regex found something)
                 if validated.zip_code:       req.zip_code      = validated.zip_code
                 if validated.location:       req.location      = validated.location
-                if validated.budget != 450000: req.budget       = validated.budget
+                if validated.budget != 450000: req.budget = validated.budget
                 if validated.min_beds != 3:  req.min_beds      = validated.min_beds
                 req.property_type = validated.property_type
                 req.strategy      = validated.strategy
@@ -529,6 +569,12 @@ async def search_stream(req: SearchRequest):
                 yield _sse("error", {"msg": f"No listings found in {loc_disp} under ${budget:,}. Try a higher budget or nearby ZIP."})
                 return
 
+            # Hard budget guard — drop any listing that exceeded max_price
+            listings = [l for l in listings if l.get("price", 0) <= budget]
+            if not listings:
+                yield _sse("error", {"msg": f"All returned listings exceeded the ${budget:,} budget. Try a higher budget."})
+                return
+
             yield _sse("status", {"msg": f"💰 Fetching rent comps for {len(listings)} properties..."})
             rent_estimates = await rentcast.get_rent_estimates_parallel(listings, zip_code)
             for i, listing in enumerate(listings):
@@ -540,6 +586,7 @@ async def search_stream(req: SearchRequest):
             yield _sse("status", {"msg": "🤖 Running 3-agent pipeline..."})
             scored = await agent.score_and_rank(
                 listings, mortgage_rate, strategy,
+                budget=budget,
                 fred_service=fred, rentcast_service=rentcast,
             )
 
@@ -686,6 +733,31 @@ async def ollama_chat(req: OllamaChatRequest):
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/feedback")
+async def submit_feedback(req: FeedbackRequest):
+    """HITL: record human vote on a scored property."""
+    if req.vote not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="vote must be 'up' or 'down'")
+    entry = {"ts": time.time(), **req.model_dump()}
+    _hitl_log.append(entry)
+    log.info("HITL | %s | vote=%s | score=%d", req.address[:30], req.vote, req.original_score)
+    return {"ok": True, "total_feedback": len(_hitl_log)}
+
+
+@app.get("/api/feedback/summary")
+async def feedback_summary():
+    """Aggregate HITL statistics — useful for model improvement review."""
+    ups   = sum(1 for f in _hitl_log if f["vote"] == "up")
+    downs = sum(1 for f in _hitl_log if f["vote"] == "down")
+    return {
+        "total":         len(_hitl_log),
+        "thumbs_up":     ups,
+        "thumbs_down":   downs,
+        "accuracy_rate": round(ups / len(_hitl_log) * 100, 1) if _hitl_log else None,
+        "recent":        list(reversed(_hitl_log[-10:])),
+    }
 
 
 def _sse(event_type: str, payload: dict) -> str:
