@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetFlow — Demo Video Presentation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  *{margin:0;padding:0;box-sizing:border-box}
+
+  :root{
+    --navy:#0B1F3A;--navy2:#0F2942;--navy3:#142e4a;
+    --teal:#0D9EA6;--teal-hi:#14D4DC;--teal-lo:#0a7880;
+    --amber:#F59E0B;--green:#10B981;--red:#EF4444;--violet:#8B5CF6;
+    --hf-orange:#FF6B35;--hf-yellow:#FFD21E;
+    --white:#fff;--off:#F0F8FF;--slate:#8BA4B8;--lt:#C5D8E8;
+    --font:'Space Grotesk',sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:var(--font)}
+
+  /* ── SLIDE CONTAINER ─────────────────────────────────────── */
+  .deck{position:relative;width:100%;height:100%}
+  .slide{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    background:var(--navy);opacity:0;pointer-events:none;
+    transition:opacity .5s ease,transform .5s ease;
+    transform:translateX(60px);overflow:hidden;
+  }
+  .slide.active{opacity:1;pointer-events:all;transform:translateX(0)}
+  .slide.prev{opacity:0;transform:translateX(-60px)}
+
+  /* ── PROGRESS ────────────────────────────────────────────── */
+  #progress-bar{
+    position:fixed;top:0;left:0;height:3px;
+    background:linear-gradient(90deg,var(--teal),var(--teal-hi));
+    transition:width .3s linear;z-index:100;
+  }
+  #slide-counter{
+    position:fixed;bottom:18px;right:22px;font-size:12px;
+    color:var(--slate);font-family:var(--mono);z-index:100;letter-spacing:.05em;
+  }
+  #timer-display{
+    position:fixed;bottom:18px;left:22px;font-size:12px;
+    color:var(--slate);font-family:var(--mono);z-index:100;
+  }
+
+  /* ── CONTROLS ────────────────────────────────────────────── */
+  #controls{
+    position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+    display:flex;gap:10px;z-index:100;
+  }
+  .ctrl-btn{
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+    color:var(--lt);font-size:12px;padding:6px 14px;border-radius:20px;
+    cursor:pointer;font-family:var(--font);transition:all .2s;
+  }
+  .ctrl-btn:hover{background:rgba(13,158,166,.25);border-color:var(--teal);color:var(--white)}
+  .ctrl-btn.active-ctrl{background:rgba(13,158,166,.3);border-color:var(--teal-hi);color:var(--teal-hi)}
+
+  /* ── COMMON ELEMENTS ─────────────────────────────────────── */
+  .tag{
+    display:inline-block;font-size:10px;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;padding:3px 10px;border-radius:20px;
+    background:rgba(13,158,166,.2);color:var(--teal-hi);border:1px solid rgba(13,158,166,.3);
+    font-family:var(--mono);
+  }
+  .tag.amber{background:rgba(245,158,11,.15);color:var(--amber);border-color:rgba(245,158,11,.3)}
+  .tag.green{background:rgba(16,185,129,.15);color:var(--green);border-color:rgba(16,185,129,.3)}
+  .tag.violet{background:rgba(139,92,246,.15);color:#a78bfa;border-color:rgba(139,92,246,.3)}
+  .tag.red{background:rgba(239,68,68,.15);color:#f87171;border-color:rgba(239,68,68,.3)}
+  .tag.hf{background:rgba(255,107,53,.15);color:var(--hf-orange);border-color:rgba(255,107,53,.3)}
+
+  .section-header{
+    padding:28px 52px 0;display:flex;align-items:center;gap:14px;
+  }
+  .section-header h1{font-size:13px;font-weight:600;color:var(--teal);letter-spacing:.12em;text-transform:uppercase}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  .grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px}
+
+  .card{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+    border-radius:12px;padding:20px;
+  }
+  .card.accent{border-color:rgba(13,158,166,.3);background:rgba(13,158,166,.06)}
+  .card.amber{border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.05)}
+  .card.violet{border-color:rgba(139,92,246,.25);background:rgba(139,92,246,.05)}
+  .card.hf{border-color:rgba(255,107,53,.3);background:rgba(255,107,53,.06)}
+
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;
+    background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.25);
+  }
+  .pill.amber{background:rgba(245,158,11,.15);color:var(--amber);border-color:rgba(245,158,11,.25)}
+  .pill.red{background:rgba(239,68,68,.15);color:#f87171;border-color:rgba(239,68,68,.25)}
+  .pill.teal{background:rgba(13,158,166,.15);color:var(--teal-hi);border-color:rgba(13,158,166,.25)}
+
+  .dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+
+  .mono{font-family:var(--mono);font-size:11px;color:var(--teal-hi);
+    background:rgba(13,158,166,.1);border:1px solid rgba(13,158,166,.2);
+    padding:2px 8px;border-radius:4px;}
+
+  .speaker-note{
+    position:absolute;bottom:52px;left:52px;right:52px;
+    font-size:13px;color:var(--slate);font-style:italic;line-height:1.6;
+    border-left:2px solid rgba(13,158,166,.3);padding-left:14px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+  ═══════════════════════════════════════════════════════════ */
+  #s1{justify-content:center;align-items:center;text-align:center;position:relative}
+  #s1 .bg-circle{
+    position:absolute;border-radius:50%;
+    background:radial-gradient(circle,rgba(13,158,166,.18) 0%,transparent 70%);
+  }
+  #s1 .bc1{width:700px;height:700px;top:-200px;right:-150px}
+  #s1 .bc2{width:400px;height:400px;bottom:-100px;left:-80px}
+  #s1 .logo{font-size:88px;font-weight:700;color:var(--white);letter-spacing:-.03em;line-height:1}
+  #s1 .logo span{color:var(--teal-hi)}
+  #s1 .tagline{font-size:18px;color:var(--slate);margin-top:16px;letter-spacing:.02em}
+  #s1 .headline{font-size:22px;color:var(--lt);max-width:640px;line-height:1.5;margin-top:28px;font-weight:400}
+  #s1 .stat-row{display:flex;gap:32px;margin-top:40px;justify-content:center}
+  #s1 .stat-box{
+    background:rgba(255,255,255,.05);border:1px solid rgba(13,158,166,.25);
+    border-radius:10px;padding:16px 28px;text-align:center;
+  }
+  #s1 .stat-val{font-size:28px;font-weight:700;color:var(--teal-hi)}
+  #s1 .stat-lbl{font-size:11px;color:var(--slate);margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
+  #s1 .time-badge{margin-top:12px}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 2 — PROBLEM
+  ═══════════════════════════════════════════════════════════ */
+  #s2 .content{padding:0 52px;flex:1;display:flex;flex-direction:column;justify-content:center}
+  #s2 .big-q{font-size:48px;font-weight:700;color:var(--white);line-height:1.15;max-width:520px}
+  #s2 .big-q span{color:var(--red)}
+  #s2 .vs-grid{display:grid;grid-template-columns:1fr 60px 1fr;gap:0;align-items:center;margin-top:32px}
+  #s2 .vs-col h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px}
+  #s2 .vs-col.before h3{color:var(--red)}
+  #s2 .vs-col.after h3{color:var(--green)}
+  #s2 .vs-item{font-size:14px;color:var(--lt);line-height:2;display:flex;align-items:center;gap:8px}
+  #s2 .vs-item .icon{font-size:14px}
+  #s2 .vs-center{font-size:30px;font-weight:700;color:var(--teal);text-align:center}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 3 — SECURITY / INPUT FLOW
+  ═══════════════════════════════════════════════════════════ */
+  #s3 .content{padding:0 52px;flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px}
+  #s3 .query-box{
+    background:rgba(13,158,166,.08);border:1px solid rgba(13,158,166,.3);
+    border-radius:10px;padding:16px 20px;
+    font-family:var(--mono);font-size:14px;color:var(--teal-hi);
+    display:flex;align-items:center;gap:10px;
+  }
+  #s3 .query-box .prefix{color:var(--slate)}
+  #s3 .stage-flow{display:flex;align-items:center;gap:0;margin-top:4px;flex-wrap:wrap;row-gap:10px}
+  #s3 .stage{
+    display:flex;align-items:center;gap:0;
+  }
+  #s3 .stage-box{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+    border-radius:8px;padding:10px 14px;font-size:11px;font-weight:600;
+    text-align:center;min-width:110px;
+  }
+  #s3 .stage-box .s-num{font-family:var(--mono);font-size:10px;color:var(--slate);margin-bottom:4px}
+  #s3 .stage-box .s-name{color:var(--white)}
+  #s3 .stage-box.active{border-color:var(--teal);background:rgba(13,158,166,.12)}
+  #s3 .stage-box.active .s-name{color:var(--teal-hi)}
+  #s3 .arrow{color:var(--slate);padding:0 6px;font-size:14px}
+  #s3 .regex-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px}
+  #s3 .regex-item{
+    background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);
+    border-radius:6px;padding:5px 8px;font-size:9.5px;font-family:var(--mono);
+    color:#f87171;text-align:center;
+  }
+  #s3 .result-row{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+  #s3 .result-box{
+    flex:1;min-width:160px;background:rgba(16,185,129,.08);
+    border:1px solid rgba(16,185,129,.25);border-radius:8px;padding:12px 16px;
+  }
+  #s3 .result-box h4{font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+  #s3 .result-box p{font-size:12px;color:var(--lt);font-family:var(--mono)}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 4 — LIVE RESULTS
+  ═══════════════════════════════════════════════════════════ */
+  #s4 .content{padding:0 52px;flex:1;display:flex;gap:24px;align-items:flex-start;padding-top:0}
+  #s4 .left{flex:1}
+  #s4 .right{width:320px}
+  #s4 .sse-feed{
+    background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);
+    border-radius:10px;padding:14px;height:200px;overflow:hidden;position:relative;
+    font-family:var(--mono);font-size:11px;
+  }
+  #s4 .sse-line{margin-bottom:5px}
+  #s4 .sse-line .ev{color:var(--teal)}
+  #s4 .sse-line .data{color:var(--lt)}
+  #s4 .sse-line .muted{color:var(--slate)}
+  #s4 .prop-mini{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+    border-radius:8px;padding:12px 14px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;
+  }
+  #s4 .prop-mini .addr{font-size:12px;color:var(--white);font-weight:500}
+  #s4 .prop-mini .metrics{display:flex;gap:10px}
+  #s4 .prop-mini .met{font-size:11px;font-family:var(--mono)}
+  #s4 .prop-mini .met span{font-size:10px;color:var(--slate)}
+  #s4 .score-ring{
+    width:80px;height:80px;border-radius:50%;
+    border:3px solid var(--teal);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;flex-shrink:0;
+  }
+  #s4 .score-ring .sv{font-size:22px;font-weight:700;color:var(--teal-hi)}
+  #s4 .score-ring .sl{font-size:9px;color:var(--slate)}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 5 — QUALITY PILLS
+  ═══════════════════════════════════════════════════════════ */
+  #s5 .content{padding:0 52px;flex:1;display:flex;gap:28px;align-items:stretch}
+  #s5 .left{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
+  #s5 .right{width:300px;display:flex;flex-direction:column;justify-content:center;gap:14px}
+  #s5 .q-signal{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+    border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:16px;
+  }
+  #s5 .q-signal.g{border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06)}
+  #s5 .q-signal.c{border-color:rgba(13,158,166,.3);background:rgba(13,158,166,.06)}
+  #s5 .q-signal.cf{border-color:rgba(139,92,246,.3);background:rgba(139,92,246,.06)}
+  #s5 .q-num{font-size:36px;font-weight:700;min-width:56px;text-align:center}
+  #s5 .q-num.g{color:var(--green)}
+  #s5 .q-num.c{color:var(--teal-hi)}
+  #s5 .q-num.cf{color:#a78bfa}
+  #s5 .q-label{font-size:14px;font-weight:600;color:var(--white);margin-bottom:4px}
+  #s5 .q-def{font-size:12px;color:var(--slate);line-height:1.5}
+  #s5 .bar-wrap{margin-top:8px;height:4px;background:rgba(255,255,255,.1);border-radius:2px}
+  #s5 .bar-fill{height:100%;border-radius:2px;transition:width 1s ease}
+  #s5 .confidence-formula{
+    background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.25);
+    border-radius:10px;padding:14px 18px;font-family:var(--mono);font-size:12px;color:#c4b5fd;
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 6 — FEEDBACK LOOP
+  ═══════════════════════════════════════════════════════════ */
+  #s6 .content{padding:0 52px;flex:1;display:flex;gap:24px;align-items:center}
+  #s6 .feedback-card{
+    flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+    border-radius:12px;padding:24px;
+  }
+  #s6 .thumb-row{display:flex;gap:12px;margin-top:16px}
+  #s6 .thumb-btn{
+    padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;
+    cursor:pointer;display:flex;align-items:center;gap:8px;border:none;
+  }
+  #s6 .thumb-up{background:rgba(16,185,129,.2);color:var(--green);border:1px solid rgba(16,185,129,.4)}
+  #s6 .thumb-dn{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+  #s6 .flow-box{
+    width:280px;display:flex;flex-direction:column;gap:14px;
+  }
+  #s6 .flow-step{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+    border-radius:8px;padding:12px 16px;display:flex;gap:12px;align-items:flex-start;
+  }
+  #s6 .step-icon{font-size:18px;flex-shrink:0}
+  #s6 .step-txt h4{font-size:12px;color:var(--white);font-weight:600;margin-bottom:3px}
+  #s6 .step-txt p{font-size:11px;color:var(--slate);line-height:1.5}
+  #s6 .ls-badge{
+    background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);
+    border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;
+  }
+  #s6 .ls-badge .ls-logo{font-size:20px}
+  #s6 .ls-badge p{font-size:12px;color:var(--lt)}
+  #s6 .ls-badge strong{color:var(--amber)}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 7 — PROPERTY CHAT
+  ═══════════════════════════════════════════════════════════ */
+  #s7 .content{padding:0 52px;flex:1;display:flex;gap:24px;align-items:flex-start;padding-top:0}
+  #s7 .chat-window{
+    width:360px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);
+    border-radius:12px;overflow:hidden;flex-shrink:0;
+  }
+  #s7 .chat-header{background:rgba(13,158,166,.15);padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+  #s7 .chat-header h3{font-size:13px;color:var(--white);font-weight:600}
+  #s7 .chat-header p{font-size:11px;color:var(--slate);margin-top:2px}
+  #s7 .chat-body{padding:14px;display:flex;flex-direction:column;gap:10px;height:240px}
+  #s7 .msg{padding:9px 13px;border-radius:10px;font-size:12px;line-height:1.5;max-width:90%}
+  #s7 .msg.user{background:rgba(13,158,166,.15);color:var(--lt);align-self:flex-end;border-radius:10px 10px 2px 10px}
+  #s7 .msg.ai{background:rgba(255,255,255,.06);color:var(--lt);border-radius:10px 10px 10px 2px}
+  #s7 .right-col{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px}
+  #s7 .mem-card{
+    background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);
+    border-radius:10px;padding:14px 18px;
+  }
+  #s7 .mem-card h4{font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+  #s7 .mem-item{font-size:12px;color:var(--lt);line-height:2;display:flex;align-items:center;gap:8px}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 8 — AGENT ARCHITECTURE
+  ═══════════════════════════════════════════════════════════ */
+  #s8 .content{padding:0 52px;flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px}
+  #s8 .agent-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  #s8 .agent-card{
+    border-radius:10px;padding:16px;border:1px solid rgba(255,255,255,.1);
+    background:rgba(255,255,255,.04);position:relative;
+  }
+  #s8 .agent-card .a-num{
+    position:absolute;top:-10px;left:16px;
+    width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+  #s8 .agent-card h3{font-size:13px;font-weight:600;color:var(--white);margin-top:8px;margin-bottom:6px}
+  #s8 .agent-card .a-tag{font-size:9px;margin-bottom:8px}
+  #s8 .agent-card ul{list-style:none;padding:0}
+  #s8 .agent-card ul li{font-size:11px;color:var(--slate);line-height:1.9;display:flex;gap:6px;align-items:flex-start}
+  #s8 .agent-card ul li::before{content:"→";color:currentColor;flex-shrink:0;margin-top:1px}
+  #s8 .orchestrator-bar{
+    background:rgba(13,158,166,.08);border:1px solid rgba(13,158,166,.2);
+    border-radius:8px;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;
+  }
+  #s8 .orch-left h3{font-size:13px;color:var(--teal-hi);font-weight:600}
+  #s8 .orch-left p{font-size:11px;color:var(--slate)}
+  #s8 .orch-metrics{display:flex;gap:20px}
+  #s8 .orch-met{text-align:center}
+  #s8 .orch-met .v{font-size:18px;font-weight:700;color:var(--teal-hi)}
+  #s8 .orch-met .l{font-size:10px;color:var(--slate);text-transform:uppercase;letter-spacing:.05em}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 9 — HUGGING FACE
+  ═══════════════════════════════════════════════════════════ */
+  #s9 .content{padding:0 52px;flex:1;display:flex;gap:28px;align-items:center}
+  #s9 .hf-hero{
+    width:300px;flex-shrink:0;text-align:center;
+  }
+  #s9 .hf-logo{
+    font-size:80px;margin-bottom:16px;
+  }
+  #s9 .hf-title{font-size:28px;font-weight:700;color:var(--white)}
+  #s9 .hf-sub{font-size:13px;color:var(--slate);margin-top:6px;line-height:1.6}
+  #s9 .hf-badge{
+    display:inline-block;margin-top:12px;background:var(--hf-orange);
+    color:var(--white);padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;
+  }
+  #s9 .right-col{flex:1;display:flex;flex-direction:column;gap:14px}
+  #s9 .hf-card{
+    background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.25);
+    border-radius:10px;padding:16px 18px;
+  }
+  #s9 .hf-card h4{font-size:12px;font-weight:600;color:var(--hf-orange);margin-bottom:6px;text-transform:uppercase;letter-spacing:.07em}
+  #s9 .hf-card p{font-size:13px;color:var(--lt);line-height:1.6}
+  #s9 .hf-card .code{font-family:var(--mono);font-size:11px;color:var(--teal-hi);background:rgba(13,158,166,.1);padding:6px 10px;border-radius:5px;margin-top:8px;display:block}
+  #s9 .model-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  #s9 .model-chip{
+    background:rgba(255,213,30,.1);border:1px solid rgba(255,213,30,.25);
+    color:var(--hf-yellow);padding:3px 10px;border-radius:20px;font-size:11px;font-family:var(--mono);
+  }
+  #s9 .local-vs{
+    display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px 16px;
+  }
+  #s9 .lv-item{flex:1;text-align:center}
+  #s9 .lv-item h5{font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+  #s9 .lv-item p{font-size:12px;color:var(--lt)}
+  #s9 .lv-sep{color:var(--slate);font-size:18px}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 10 — OBSERVABILITY
+  ═══════════════════════════════════════════════════════════ */
+  #s10 .content{padding:0 52px;flex:1;display:flex;gap:22px;align-items:stretch}
+  #s10 .left{flex:1;display:flex;flex-direction:column;gap:14px}
+  #s10 .right{width:280px;display:flex;flex-direction:column;gap:14px}
+  #s10 .ls-card{
+    background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);
+    border-radius:10px;padding:16px;flex:1;
+  }
+  #s10 .ls-card h3{font-size:13px;font-weight:600;color:var(--amber);margin-bottom:12px}
+  #s10 .trace-row{
+    display:flex;align-items:center;gap:10px;padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,.05);
+  }
+  #s10 .trace-row:last-child{border-bottom:none}
+  #s10 .tr-name{font-size:12px;color:var(--lt);flex:1}
+  #s10 .tr-time{font-size:11px;font-family:var(--mono);color:var(--teal-hi);min-width:55px;text-align:right}
+  #s10 .tr-bar{height:3px;background:var(--teal);border-radius:2px;min-width:4px;transition:width .8s}
+  #s10 .log-viewer{
+    background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.07);
+    border-radius:10px;padding:12px;font-family:var(--mono);font-size:10.5px;flex:1;
+  }
+  #s10 .log-line{margin-bottom:4px;line-height:1.6}
+  #s10 .log-time{color:var(--slate)}
+  #s10 .log-ctx{color:var(--teal)}
+  #s10 .log-msg{color:var(--lt)}
+  #s10 .log-val{color:var(--amber)}
+  #s10 .metric-card{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+    border-radius:8px;padding:12px;
+  }
+  #s10 .metric-card h4{font-size:10px;color:var(--slate);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+  #s10 .metric-big{font-size:28px;font-weight:700;color:var(--white)}
+  #s10 .metric-sub{font-size:11px;color:var(--slate);margin-top:2px}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 11 — TECH STACK
+  ═══════════════════════════════════════════════════════════ */
+  #s11 .content{padding:0 52px;flex:1;display:flex;gap:22px;align-items:stretch}
+  #s11 .stack-col{flex:1;display:flex;flex-direction:column;gap:10px}
+  #s11 .stack-section h3{font-size:10px;color:var(--slate);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.06)}
+  #s11 .stack-item{
+    display:flex;align-items:center;gap:10px;padding:8px 12px;
+    background:rgba(255,255,255,.03);border-radius:7px;border:1px solid rgba(255,255,255,.06);
+  }
+  #s11 .si-icon{font-size:16px;flex-shrink:0;width:22px;text-align:center}
+  #s11 .si-name{font-size:12px;font-weight:600;color:var(--white)}
+  #s11 .si-ver{font-size:10px;color:var(--slate);font-family:var(--mono);margin-left:auto}
+  #s11 .deploy-col{width:240px;display:flex;flex-direction:column;gap:10px}
+  #s11 .mode-card{border-radius:8px;padding:12px 14px;border:1px solid rgba(255,255,255,.08)}
+  #s11 .mode-card h4{font-size:11px;font-weight:600;margin-bottom:4px}
+  #s11 .mode-card p{font-size:11px;color:var(--slate);line-height:1.5}
+
+  /* ═══════════════════════════════════════════════════════════
+     SLIDE 12 — CLOSING
+  ═══════════════════════════════════════════════════════════ */
+  #s12{justify-content:center;align-items:center;text-align:center;position:relative}
+  #s12 .closing-logo{font-size:72px;font-weight:700;color:var(--white);letter-spacing:-.02em}
+  #s12 .closing-logo span{color:var(--teal-hi)}
+  #s12 .closing-sub{font-size:16px;color:var(--slate);margin-top:10px;font-style:italic}
+  #s12 .pill-row{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap;justify-content:center}
+  #s12 .p-pill{
+    padding:7px 18px;border-radius:20px;font-size:12px;font-weight:600;
+    border:1px solid;
+  }
+  #s12 .closing-line{
+    font-size:18px;color:var(--lt);max-width:500px;line-height:1.6;margin-top:30px;font-weight:400;
+  }
+  #s12 .bg-ring{
+    position:absolute;border-radius:50%;border:1px solid;pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar" style="width:0%"></div>
+<div id="timer-display">0:00 / 5:00</div>
+<div id="slide-counter">1 / 12</div>
+
+<div id="controls">
+  <button class="ctrl-btn" onclick="prev()">◀ Prev</button>
+  <button class="ctrl-btn active-ctrl" id="play-btn" onclick="togglePlay()">⏸ Pause</button>
+  <button class="ctrl-btn" onclick="next()">Next ▶</button>
+  <button class="ctrl-btn" onclick="restart()">↺ Restart</button>
+  <button class="ctrl-btn active-ctrl" id="mute-btn" onclick="toggleMute()">🔊 Voice On</button>
+  <select id="voice-select" onchange="setVoice(this.value)" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#C5D8E8;font-size:11px;padding:5px 8px;border-radius:20px;cursor:pointer;font-family:var(--font);max-width:160px"></select>
+  <span style="font-size:11px;color:#8BA4B8">Speed:</span>
+  <input type="range" min="0.7" max="1.6" step="0.1" value="1.05" oninput="setRate(this.value)" style="width:80px;accent-color:#14D4DC">
+  <span id="rate-val" style="font-size:11px;color:#14D4DC;min-width:28px">1.1×</span>
+</div>
+
+<div id="subtitle-bar" style="position:fixed;bottom:50px;left:50%;transform:translateX(-50%);max-width:760px;width:90%;z-index:100;text-align:center;pointer-events:none">
+  <div id="subtitle-text" style="font-size:15px;color:rgba(255,255,255,.88);background:rgba(0,0,0,.6);padding:7px 20px;border-radius:20px;display:inline-block;backdrop-filter:blur(4px);transition:opacity .3s;opacity:0;font-family:var(--font);line-height:1.5"></div>
+</div>
+
+<div id="speaking-indicator" style="position:fixed;top:12px;right:16px;z-index:200;opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px">
+  <div style="display:flex;gap:3px;align-items:flex-end;height:16px">
+    <div style="width:3px;background:#14D4DC;border-radius:2px;animation:wave 0.8s ease-in-out infinite" class="w1"></div>
+    <div style="width:3px;background:#14D4DC;border-radius:2px;animation:wave 0.8s ease-in-out infinite .15s" class="w2"></div>
+    <div style="width:3px;background:#14D4DC;border-radius:2px;animation:wave 0.8s ease-in-out infinite .3s" class="w3"></div>
+    <div style="width:3px;background:#14D4DC;border-radius:2px;animation:wave 0.8s ease-in-out infinite .45s" class="w4"></div>
+  </div>
+  <span style="font-size:11px;color:#14D4DC;font-family:var(--font)">Speaking…</span>
+</div>
+
+<style>
+@keyframes wave{0%,100%{height:4px}50%{height:14px}}
+.w1{height:8px}.w2{height:13px}.w3{height:10px}.w4{height:6px}
+</style>
+
+<div class="deck" id="deck">
+
+<!-- ═══ SLIDE 1 — TITLE ═══════════════════════════════════ -->
+<div class="slide active" id="s1">
+  <div class="bg-circle bc1"></div>
+  <div class="bg-circle bc2"></div>
+  <div class="logo">Net<span>Flow</span></div>
+  <div class="tagline">Know your net. Grow your portfolio.</div>
+  <div class="headline">An AI investment analyst that ranks cash-flowing rental properties by ZIP &amp; budget — in seconds, not weeks.</div>
+  <div class="stat-row">
+    <div class="stat-box"><div class="stat-val">4</div><div class="stat-lbl">AI Agents</div></div>
+    <div class="stat-box"><div class="stat-val">3</div><div class="stat-lbl">LLM Calls</div></div>
+    <div class="stat-box"><div class="stat-val">&lt; 4s</div><div class="stat-lbl">Latency</div></div>
+    <div class="stat-box"><div class="stat-val">~936</div><div class="stat-lbl">Tokens / Search</div></div>
+  </div>
+  <div class="time-badge"><span class="tag">0:00 – 0:30</span></div>
+</div>
+
+<!-- ═══ SLIDE 2 — PROBLEM ═══════════════════════════════════ -->
+<div class="slide" id="s2">
+  <div class="section-header"><span class="tag red">Problem</span><h1>Real Estate Investing is Broken</h1></div>
+  <div class="content">
+    <div class="big-q">Individual investors waste <span>weeks</span> on manual analysis</div>
+    <div class="vs-grid">
+      <div class="vs-col before">
+        <h3>Before NetFlow</h3>
+        <div class="vs-item"><span class="icon">⏱</span> Pulling data from 10+ websites</div>
+        <div class="vs-item"><span class="icon">🧮</span> Calculating cash flow by hand</div>
+        <div class="vs-item"><span class="icon">❓</span> Guessing at market risk</div>
+        <div class="vs-item"><span class="icon">📉</span> Missing the best deals</div>
+        <div class="vs-item"><span class="icon">💸</span> No traceability on why</div>
+      </div>
+      <div class="vs-center">→</div>
+      <div class="vs-col after">
+        <h3>With NetFlow</h3>
+        <div class="vs-item"><span class="icon">⚡</span> Natural-language query, live data</div>
+        <div class="vs-item"><span class="icon">🤖</span> Multi-stage AI analysis</div>
+        <div class="vs-item"><span class="icon">🛡</span> Risk-flagged, scored properties</div>
+        <div class="vs-item"><span class="icon">📡</span> Streamed results in seconds</div>
+        <div class="vs-item"><span class="icon">🔍</span> Every decision traceable</div>
+      </div>
+    </div>
+  </div>
+  <div class="speaker-note">"Real estate investing is broken. We built NetFlow — an AI analyst that does this in seconds."</div>
+</div>
+
+<!-- ═══ SLIDE 3 — SECURITY / INPUT ══════════════════════════ -->
+<div class="slide" id="s3">
+  <div class="section-header"><span class="tag red">UserAgent · Stage 1–6</span><h1>6-Layer Input Security — Before Any LLM Sees Your Text</h1></div>
+  <div class="content">
+    <div class="query-box">
+      <span class="prefix">$&gt;</span>
+      "Show me 3+ bedroom houses under $400k in Dallas that cashflow, good rent growth"
+    </div>
+    <div class="stage-flow">
+      <div class="stage">
+        <div class="stage-box active"><div class="s-num">01</div><div class="s-name">Guard</div></div>
+        <div class="arrow">→</div>
+      </div>
+      <div class="stage">
+        <div class="stage-box active"><div class="s-num">02</div><div class="s-name">Sanitise</div></div>
+        <div class="arrow">→</div>
+      </div>
+      <div class="stage">
+        <div class="stage-box active"><div class="s-num">03</div><div class="s-name">Classify</div></div>
+        <div class="arrow">→</div>
+      </div>
+      <div class="stage">
+        <div class="stage-box active"><div class="s-num">04</div><div class="s-name">Extract</div></div>
+        <div class="arrow">→</div>
+      </div>
+      <div class="stage">
+        <div class="stage-box active"><div class="s-num">05</div><div class="s-name">Complete</div></div>
+        <div class="arrow">→</div>
+      </div>
+      <div class="stage">
+        <div class="stage-box active"><div class="s-num">06</div><div class="s-name">Route</div></div>
+      </div>
+    </div>
+    <div class="regex-grid">
+      <div class="regex-item">JAILBREAK</div><div class="regex-item">SQL_INJECT</div>
+      <div class="regex-item">SHELL_INJECT</div><div class="regex-item">XSS_HTML</div>
+      <div class="regex-item">PY_INJECT</div><div class="regex-item">PROMPT_EXT</div>
+      <div class="regex-item">PERSONA_OVR</div><div class="regex-item">NULL_BYTE</div>
+      <div class="regex-item">DATA_EXFIL</div><div class="regex-item">+15 more…</div>
+    </div>
+    <div class="result-row">
+      <div class="result-box">
+        <h4>Extracted</h4>
+        <p>zip: 75201 | budget: $400k<br>beds: 3 | strategy: LTR<br>type: SFH</p>
+      </div>
+      <div class="result-box">
+        <h4>Intent</h4>
+        <p>SEARCH → ValidatedRequest<br>Raw text: never reaches LLM<br>Rate limit: 10 req / 60s</p>
+      </div>
+      <div class="result-box" style="background:rgba(16,185,129,.06);border-color:rgba(16,185,129,.2)">
+        <h4>Result</h4>
+        <p style="color:var(--green)">✓ Passed all guards<br>✓ 0 injection patterns matched<br>✓ Routed to MarketAnalyst</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 4 — LIVE RESULTS ═══════════════════════════════ -->
+<div class="slide" id="s4">
+  <div class="section-header"><span class="tag green">Live SSE Stream</span><h1>Real-Time Results — Server-Sent Events, No Polling</h1></div>
+  <div class="content" style="padding-top:8px">
+    <div class="left">
+      <div class="sse-feed">
+        <div class="sse-line"><span class="ev">event: status</span> <span class="data">{"msg":"Fetching live FRED rate…"}</span></div>
+        <div class="sse-line"><span class="ev">event: status</span> <span class="data">{"msg":"RentCast AVM: 75201…"}</span></div>
+        <div class="sse-line"><span class="ev">event: status</span> <span class="data">{"msg":"Scoring 10 properties…"}</span></div>
+        <div class="sse-line"><span class="ev">event: properties</span> <span class="data">{"data":[…10 props…],"mortgage_rate":6.94,"run_id":"abc123"}</span></div>
+        <div class="sse-line"><span class="ev">event: ai_start</span> <span class="data">{}</span></div>
+        <div class="sse-line"><span class="ev">event: ai_token</span> <span class="data">{"token":"Dallas 75201 shows tight…"}</span></div>
+        <div class="sse-line"><span class="ev">event: done</span> <span class="data">{}</span></div>
+      </div>
+      <div class="prop-mini" style="margin-top:12px">
+        <div>
+          <div class="addr">4521 Elm St, Dallas TX 75201</div>
+          <div class="metrics" style="margin-top:5px">
+            <div class="met" style="color:var(--green)">+$612<span>/mo CF</span></div>
+            <div class="met" style="color:var(--teal-hi)">6.8%<span> Cap</span></div>
+            <div class="met" style="color:var(--amber)">94<span> GRM</span></div>
+            <div class="met" style="color:#f87171">HIGH<span> Risk</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div class="score-ring"><div class="sv">82</div><div class="sl">AI Score</div></div>
+          <span class="tag green" style="font-size:9px">Cash+</span>
+        </div>
+      </div>
+      <div class="prop-mini">
+        <div>
+          <div class="addr">7803 Oak Ave, Dallas TX 75202</div>
+          <div class="metrics" style="margin-top:5px">
+            <div class="met" style="color:var(--green)">+$448<span>/mo CF</span></div>
+            <div class="met" style="color:var(--teal-hi)">7.2%<span> Cap</span></div>
+            <div class="met" style="color:var(--amber)">87<span> GRM</span></div>
+            <div class="met" style="color:var(--green)">LOW<span> Risk</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div class="score-ring" style="border-color:var(--amber)"><div class="sv" style="color:var(--amber)">91</div><div class="sl">AI Score</div></div>
+          <span class="tag amber" style="font-size:9px">High Cap</span>
+        </div>
+      </div>
+    </div>
+    <div class="right" style="display:flex;flex-direction:column;gap:14px;justify-content:center">
+      <div class="card accent">
+        <div style="font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Live API Sources</div>
+        <div style="font-size:13px;color:var(--lt);line-height:2">
+          📡 RentCast listings &amp; AVM<br>📈 FRED 30-yr mortgage rate<br>🏠 10 top properties ranked<br>🤖 AI narrative streaming
+        </div>
+      </div>
+      <div class="card" style="border-color:rgba(16,185,129,.2);background:rgba(16,185,129,.04)">
+        <div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Metrics Computed</div>
+        <div style="font-size:12px;color:var(--lt);line-height:2">
+          Cap Rate = NOI ÷ Price × 100<br>
+          Cash Flow = Rent − PITI − OpEx<br>
+          GRM = Price ÷ Annual Rent<br>
+          ai_score ∈ [0, 100]
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:4px">Current Mortgage Rate</div>
+        <div style="font-size:28px;font-weight:700;color:var(--teal-hi)">6.94%</div>
+        <div style="font-size:11px;color:var(--slate)">FRED MORTGAGE30US · live</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 5 — QUALITY SIGNALS ════════════════════════════ -->
+<div class="slide" id="s5">
+  <div class="section-header"><span class="tag violet">AI Confidence</span><h1>Quality Signals — Transparency at Scale</h1></div>
+  <div class="content" style="padding-top:0">
+    <div class="left">
+      <div style="font-size:13px;color:var(--slate);margin-bottom:14px">NEW: Every property card shows three AI confidence signals so investors know when to trust the AI and when to do their own due diligence.</div>
+      <div class="q-signal g">
+        <div class="q-num g">87</div>
+        <div style="flex:1">
+          <div class="q-label">Groundedness</div>
+          <div class="q-def">Is the AI reasoning anchored in retrieved listing facts and deterministic financials?</div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:87%;background:var(--green)"></div></div>
+        </div>
+      </div>
+      <div class="q-signal c">
+        <div class="q-num c">95</div>
+        <div style="flex:1">
+          <div class="q-label">Correctness</div>
+          <div class="q-def">Agreement between LLM-adjusted score and the deterministic rubric baseline.</div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:95%;background:var(--teal)"></div></div>
+        </div>
+      </div>
+      <div class="q-signal cf">
+        <div class="q-num cf">88</div>
+        <div style="flex:1">
+          <div class="q-label">Confidence</div>
+          <div class="q-def">Composite trust signal combining groundedness, correctness, and risk penalty.</div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:88%;background:#8B5CF6"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="confidence-formula">
+        <div style="font-size:10px;color:var(--slate);margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em">Confidence Formula</div>
+        <div style="color:#c4b5fd">confidence =</div>
+        <div style="margin-top:6px;line-height:2">
+          0.40 × groundedness<br>
+          + 0.35 × correctness<br>
+          + 0.25 × (100 − risk_penalty)
+        </div>
+      </div>
+      <div class="card" style="margin-top:0;border-color:rgba(139,92,246,.2);background:rgba(139,92,246,.05)">
+        <div style="font-size:11px;color:#a78bfa;margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em">What this means</div>
+        <div style="font-size:12px;color:var(--lt);line-height:2">
+          ≥ 90 → Trust AI decision fully<br>
+          70–89 → Spot-check key assumptions<br>
+          &lt; 70 → Do your own due diligence
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:8px">LangSmith publishes per run:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <span class="tag">groundedness 0–1</span>
+          <span class="tag">correctness 0–1</span>
+          <span class="tag violet">confidence 0–1</span>
+          <span class="tag amber">token_usage_estimate</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 6 — FEEDBACK LOOP ═══════════════════════════════ -->
+<div class="slide" id="s6">
+  <div class="section-header"><span class="tag amber">Observability</span><h1>User Feedback Loop — Production-Grade Learning</h1></div>
+  <div class="content">
+    <div class="feedback-card">
+      <div style="font-size:13px;color:var(--white);font-weight:600">4521 Elm St, Dallas TX · Score 82</div>
+      <div style="font-size:12px;color:var(--slate);margin-top:4px">Was this recommendation accurate and useful?</div>
+      <div class="thumb-row">
+        <button class="thumb-btn thumb-up">👍 Useful</button>
+        <button class="thumb-btn thumb-dn">👎 Not relevant</button>
+      </div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:6px">Optional note (280 chars)</div>
+        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:8px;font-size:11px;color:var(--slate);font-family:var(--mono)">
+          "Cap rate looks strong. Will investigate DOM."
+        </div>
+      </div>
+      <div class="ls-badge" style="margin-top:14px">
+        <div class="ls-logo">🔗</div>
+        <p>Vote captured in <strong>LangSmith</strong> tied to run_id + property rank + address + ai_score. Idempotent — resubmit overwrites.</p>
+      </div>
+    </div>
+    <div class="flow-box">
+      <div class="flow-step">
+        <div class="step-icon">1️⃣</div>
+        <div class="step-txt">
+          <h4>User votes 👍 / 👎</h4>
+          <p>POST /api/feedback with run_id, rank, address, score, comment</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-icon">2️⃣</div>
+        <div class="step-txt">
+          <h4>Captured in LangSmith</h4>
+          <p>Attached to the exact pipeline span tree that generated this result</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-icon">3️⃣</div>
+        <div class="step-txt">
+          <h4>Quality signals updated</h4>
+          <p>We learn which properties converted and which were red herrings over time</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-icon">4️⃣</div>
+        <div class="step-txt">
+          <h4>Audit log at /api/user-agent/audit</h4>
+          <p>Every decision traceable end-to-end with request ID</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 7 — PROPERTY CHAT ══════════════════════════════ -->
+<div class="slide" id="s7">
+  <div class="section-header"><span class="tag green">PropertyChat</span><h1>Grounded Conversational Analysis — No Hallucinations</h1></div>
+  <div class="content" style="padding-top:6px">
+    <div class="chat-window">
+      <div class="chat-header">
+        <h3>4521 Elm St, Dallas TX 75201</h3>
+        <p>ConversationMemory · 5-turn sliding window</p>
+      </div>
+      <div class="chat-body">
+        <div class="msg user">What if I only put 15% down instead of 20%?</div>
+        <div class="msg ai">With 15% down on $360k, your loan is $306k at 6.94% → monthly P&amp;I = $2,034. Add taxes ($380) + insurance ($120) = PITI $2,534. At est. rent $3,180, your monthly cash flow drops to +$284 vs +$612 at 20% down. Cap rate unchanged at 6.8%. Risk stays MEDIUM.</div>
+        <div class="msg user">How does that compare to 10% down?</div>
+        <div class="msg ai">10% down → P&amp;I = $2,160, PITI = $2,660. Cash flow turns negative at −$68/mo. PMI adds ~$175/mo making it −$243. I'd stick with 15–20% for this property given the MEDIUM risk flag.</div>
+      </div>
+    </div>
+    <div class="right-col">
+      <div class="mem-card">
+        <h4>ConversationMemory</h4>
+        <div class="mem-item">📍 Scoped per property address</div>
+        <div class="mem-item">🔄 5-turn sliding window</div>
+        <div class="mem-item">📊 Grounded in live financial data</div>
+        <div class="mem-item">🔍 Every answer traceable in LangSmith</div>
+      </div>
+      <div class="card" style="border-color:rgba(16,185,129,.2)">
+        <div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Recalculates in Real-time</div>
+        <div style="font-size:12px;color:var(--lt);line-height:2">
+          ✓ PITI adjusts to new down %<br>
+          ✓ Cash flow re-derived<br>
+          ✓ Risk profile unchanged<br>
+          ✓ Mortgage rate from FRED live
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--slate);margin-bottom:8px">Compare across all 10 picks</div>
+        <div style="font-size:12px;color:var(--lt)">ComparisonCharts view shows cap rate · cash flow · DOM · risk across ranked properties side-by-side</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 8 — AGENT ARCHITECTURE ════════════════════════ -->
+<div class="slide" id="s8">
+  <div class="section-header"><span class="tag">4-Agent Pipeline</span><h1>Orchestrated AI Architecture — Deterministic at Every Stage</h1></div>
+  <div class="content">
+    <div class="orchestrator-bar">
+      <div class="orch-left">
+        <h3>NetFlowAgent Orchestrator</h3>
+        <p>score_and_rank() · AgentContext (session memory) · tool_trace + stage_times + token_usage + fallback_flags</p>
+      </div>
+      <div class="orch-metrics">
+        <div class="orch-met"><div class="v">3</div><div class="l">LLM Calls</div></div>
+        <div class="orch-met"><div class="v">~936</div><div class="l">Tokens</div></div>
+        <div class="orch-met"><div class="v">8</div><div class="l">Stages</div></div>
+        <div class="orch-met"><div class="v">100%</div><div class="l">Fallback</div></div>
+      </div>
+    </div>
+    <div class="agent-grid">
+      <div class="agent-card" style="border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.05)">
+        <div class="a-num" style="background:var(--red);color:white">1</div>
+        <h3>UserAgent</h3>
+        <span class="tag red a-tag">CPU-only · 0 tokens</span>
+        <ul>
+          <li>6-stage guard + sanitiser</li>
+          <li>25 injection regexes</li>
+          <li>NLP intent extractor</li>
+          <li>Rate limit: 10/60s</li>
+          <li>Output: ValidatedRequest</li>
+        </ul>
+      </div>
+      <div class="agent-card" style="border-color:rgba(13,158,166,.3);background:rgba(13,158,166,.05)">
+        <div class="a-num" style="background:var(--teal);color:white">2</div>
+        <h3>MarketAnalyst</h3>
+        <span class="tag a-tag">MarketMemory TTL 15m</span>
+        <ul>
+          <li>FRED mortgage rate live</li>
+          <li>RentCast AVM per ZIP</li>
+          <li>1 streaming LLM call</li>
+          <li>≤ 64 token narrative</li>
+          <li>Output: MarketContext</li>
+        </ul>
+      </div>
+      <div class="agent-card" style="border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.04)">
+        <div class="a-num" style="background:var(--green);color:white">3</div>
+        <h3>PropertyScorer</h3>
+        <span class="tag green a-tag">1 batched LLM call</span>
+        <ul>
+          <li>10 props in ONE call</li>
+          <li>Compact JSON: c/cf/g/d</li>
+          <li>num_predict cap: 220</li>
+          <li>Strategy reranking</li>
+          <li>Output: ScoredProperty[]</li>
+        </ul>
+      </div>
+      <div class="agent-card" style="border-color:rgba(139,92,246,.3);background:rgba(139,92,246,.04)">
+        <div class="a-num" style="background:var(--violet);color:white">4</div>
+        <h3>RiskAdvisor</h3>
+        <span class="tag violet a-tag">RiskCache TTL 1hr</span>
+        <ul>
+          <li>Batched HIGH-risk only</li>
+          <li>num_predict cap: 400</li>
+          <li>Cross-request caching</li>
+          <li>LOW/MEDIUM/HIGH flags</li>
+          <li>Output: RiskProfile dict</li>
+        </ul>
+      </div>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center">
+      <div style="flex:1;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:10px 16px;font-size:12px;color:var(--lt)">
+        ✅ Genius: If Ollama goes down → deterministic rule-based fallback. Same outputs. No downtime. User never knows.
+      </div>
+      <div style="width:200px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:10px 16px;font-size:12px;color:var(--lt);text-align:center">
+        <div style="font-size:20px;font-weight:700;color:var(--amber)">0</div>
+        <div style="color:var(--slate);font-size:11px">tokens from UserAgent<br>(CPU-only guard)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 9 — HUGGING FACE ═══════════════════════════════ -->
+<div class="slide" id="s9">
+  <div class="section-header"><span class="tag hf">Hugging Face</span><h1>Model Flexibility — Local Ollama + Hugging Face Ecosystem</h1></div>
+  <div class="content">
+    <div class="hf-hero">
+      <div class="hf-logo">🤗</div>
+      <div class="hf-title">Hugging Face</div>
+      <div class="hf-sub">NetFlow's LLM layer is adapter-based — swap Ollama for any Hugging Face model or deploy to HF Spaces</div>
+      <div class="hf-badge">HF Spaces Ready</div>
+    </div>
+    <div class="right-col">
+      <div class="local-vs">
+        <div class="lv-item">
+          <h5>Current (Local)</h5>
+          <p>Ollama · llama3.1:8b<br>No API cost · No latency<br>Full privacy · Zero cloud</p>
+        </div>
+        <div class="lv-sep">⟷</div>
+        <div class="lv-item">
+          <h5>HF Alternative</h5>
+          <p>HF Inference API<br>or HF Spaces GPU<br>Scale-on-demand</p>
+        </div>
+      </div>
+      <div class="hf-card">
+        <h4>Compatible HF Models</h4>
+        <p>Drop-in replacements via LangChain's HuggingFace adapter — same prompt templates, same fallback logic</p>
+        <div class="model-chips">
+          <span class="model-chip">Llama-3.1-8B-Instruct</span>
+          <span class="model-chip">Mistral-7B-Instruct</span>
+          <span class="model-chip">Qwen2.5-7B</span>
+          <span class="model-chip">Phi-3.5-mini</span>
+        </div>
+        <code class="code">from langchain_huggingface import HuggingFaceEndpoint<br>llm = HuggingFaceEndpoint(repo_id="meta-llama/Llama-3.1-8B-Instruct")</code>
+      </div>
+      <div class="hf-card">
+        <h4>Deploy to HF Spaces</h4>
+        <p>FastAPI backend + Next.js frontend containerized via Docker Compose — same architecture deploys to Hugging Face Spaces with a single config change</p>
+        <code class="code">OLLAMA_BASE_URL=https://api-inference.huggingface.co<br>HF_TOKEN=hf_xxxxx</code>
+      </div>
+      <div class="hf-card">
+        <h4>HF Hub Model Cards</h4>
+        <p>All Ollama models have HF Hub equivalents. NetFlow's token budget (~936/search) and compact JSON payloads make it compatible with HF's free tier rate limits.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 10 — OBSERVABILITY ═════════════════════════════ -->
+<div class="slide" id="s10">
+  <div class="section-header"><span class="tag amber">LangSmith</span><h1>Production Observability — Every Call Traced &amp; Measured</h1></div>
+  <div class="content" style="padding-top:4px">
+    <div class="left">
+      <div class="ls-card">
+        <h3>🔗 LangSmith Span Tree — per request</h3>
+        <div class="trace-row">
+          <div class="tr-name">UserAgent.process()</div>
+          <div style="flex:1"><div class="tr-bar" style="width:8%;background:var(--red)"></div></div>
+          <div class="tr-time">12ms</div>
+        </div>
+        <div class="trace-row">
+          <div class="tr-name">MarketAnalystAgent</div>
+          <div style="flex:1"><div class="tr-bar" style="width:55%;background:var(--teal)"></div></div>
+          <div class="tr-time">820ms</div>
+        </div>
+        <div class="trace-row">
+          <div class="tr-name">compute_financials() ×10</div>
+          <div style="flex:1"><div class="tr-bar" style="width:10%;background:var(--slate)"></div></div>
+          <div class="tr-time">38ms</div>
+        </div>
+        <div class="trace-row">
+          <div class="tr-name">RiskAdvisorAgent (batched)</div>
+          <div style="flex:1"><div class="tr-bar" style="width:70%;background:var(--violet)"></div></div>
+          <div class="tr-time">1040ms</div>
+        </div>
+        <div class="trace-row">
+          <div class="tr-name">PropertyScorerAgent (batched)</div>
+          <div style="flex:1"><div class="tr-bar" style="width:60%;background:var(--green)"></div></div>
+          <div class="tr-time">900ms</div>
+        </div>
+        <div class="trace-row">
+          <div class="tr-name">stream_market_summary()</div>
+          <div style="flex:1"><div class="tr-bar" style="width:45%;background:var(--amber)"></div></div>
+          <div class="tr-time">680ms</div>
+        </div>
+      </div>
+      <div class="log-viewer">
+        <div class="log-line"><span class="log-time">[14:23:01]</span> <span class="log-ctx">netflow.request</span> <span class="log-msg"> req_id=</span><span class="log-val">a7f3c1</span> <span class="log-msg">zip=75201 budget=400000</span></div>
+        <div class="log-line"><span class="log-time">[14:23:01]</span> <span class="log-ctx">netflow.agent.market</span> <span class="log-msg"> FRED rate=</span><span class="log-val">6.94%</span> <span class="log-msg">cache=MISS ttl=15m</span></div>
+        <div class="log-line"><span class="log-time">[14:23:02]</span> <span class="log-ctx">netflow.agent.risk</span> <span class="log-msg"> HIGH-risk count=</span><span class="log-val">3</span> <span class="log-msg">batching…</span></div>
+        <div class="log-line"><span class="log-time">[14:23:03]</span> <span class="log-ctx">netflow.agent.scorer</span> <span class="log-msg"> llm=</span><span class="log-val">ok</span> <span class="log-msg">tokens=</span><span class="log-val">345</span> <span class="log-msg">fallback=</span><span class="log-val">false</span></div>
+        <div class="log-line"><span class="log-time">[14:23:04]</span> <span class="log-ctx">netflow.sse</span> <span class="log-msg"> event=</span><span class="log-val">properties</span> <span class="log-msg">run_id=abc123 props=10</span></div>
+        <div class="log-line"><span class="log-time">[14:23:04]</span> <span class="log-ctx">netflow.request</span> <span class="log-msg"> total=</span><span class="log-val">3.4s</span> <span class="log-msg">tokens=</span><span class="log-val">936</span> <span class="log-msg">fallback={}</span></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="metric-card">
+        <h4>Total Tokens / Search</h4>
+        <div class="metric-big">~936</div>
+        <div class="metric-sub">Scorer 345 · Risk 415 · Narrative 176</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(16,185,129,.2)">
+        <h4>Cache Hit Rate</h4>
+        <div class="metric-big" style="color:var(--green)">~70%</div>
+        <div class="metric-sub">ZIP repeated within TTL windows</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(139,92,246,.2)">
+        <h4>Quality Signals (LangSmith)</h4>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+            <span style="color:var(--lt)">groundedness</span><span style="color:var(--green);font-family:var(--mono)">0.87</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+            <span style="color:var(--lt)">correctness</span><span style="color:var(--teal-hi);font-family:var(--mono)">0.95</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+            <span style="color:var(--lt)">confidence</span><span style="color:#a78bfa;font-family:var(--mono)">0.88</span>
+          </div>
+        </div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(245,158,11,.2)">
+        <h4>Endpoints</h4>
+        <div style="font-size:11px;color:var(--lt);font-family:var(--mono);line-height:2">
+          GET /health<br>
+          GET /api/observability<br>
+          GET /api/user-agent/audit<br>
+          POST /api/feedback
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 11 — TECH STACK ════════════════════════════════ -->
+<div class="slide" id="s11">
+  <div class="section-header"><span class="tag">Stack</span><h1>Tech Stack &amp; Deployment Modes</h1></div>
+  <div class="content" style="padding-top:6px">
+    <div class="stack-col">
+      <div class="stack-section">
+        <h3>Frontend</h3>
+        <div class="stack-item"><div class="si-icon">⚡</div><div class="si-name">Next.js</div><div class="si-ver">16.2.3</div></div>
+        <div class="stack-item"><div class="si-icon">⚛</div><div class="si-name">React + TypeScript</div><div class="si-ver">18.3 / 5.6</div></div>
+        <div class="stack-item"><div class="si-icon">🎨</div><div class="si-name">Tailwind CSS</div><div class="si-ver">3.4</div></div>
+        <div class="stack-item"><div class="si-icon">💾</div><div class="si-name">IndexedDB persist</div><div class="si-ver">favorites</div></div>
+      </div>
+    </div>
+    <div class="stack-col">
+      <div class="stack-section">
+        <h3>Backend</h3>
+        <div class="stack-item"><div class="si-icon">🐍</div><div class="si-name">FastAPI + uvicorn</div><div class="si-ver">0.115 / 3.11</div></div>
+        <div class="stack-item"><div class="si-icon">🔗</div><div class="si-name">LangChain + LangSmith</div><div class="si-ver">0.3.7</div></div>
+        <div class="stack-item"><div class="si-icon">📡</div><div class="si-name">SSE + httpx async</div><div class="si-ver">sse-starlette</div></div>
+        <div class="stack-item"><div class="si-icon">🤗</div><div class="si-name">Hugging Face compat.</div><div class="si-ver">langchain-hf</div></div>
+      </div>
+    </div>
+    <div class="stack-col">
+      <div class="stack-section">
+        <h3>AI + Data</h3>
+        <div class="stack-item"><div class="si-icon">🦙</div><div class="si-name">Ollama llama3.1:8b</div><div class="si-ver">local</div></div>
+        <div class="stack-item"><div class="si-icon">🏠</div><div class="si-name">RentCast API</div><div class="si-ver">listings+AVM</div></div>
+        <div class="stack-item"><div class="si-icon">📈</div><div class="si-name">FRED API</div><div class="si-ver">MORTGAGE30US</div></div>
+        <div class="stack-item"><div class="si-icon">🔍</div><div class="si-name">LangSmith tracing</div><div class="si-ver">0.1.147</div></div>
+      </div>
+    </div>
+    <div class="deploy-col">
+      <div class="stack-section" style="margin-bottom:0">
+        <h3>Deployment</h3>
+      </div>
+      <div class="mode-card" style="background:rgba(16,185,129,.06);border-color:rgba(16,185,129,.2)">
+        <h4 style="color:var(--green)">Demo Mode</h4>
+        <p>No API keys · Mock data · Rule-based scoring · Zero setup</p>
+      </div>
+      <div class="mode-card" style="background:rgba(13,158,166,.06);border-color:rgba(13,158,166,.2)">
+        <h4 style="color:var(--teal-hi)">Development</h4>
+        <p>Local Ollama · Real API keys · Full LangSmith tracing</p>
+      </div>
+      <div class="mode-card" style="background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.2)">
+        <h4 style="color:#a78bfa">Production</h4>
+        <p>Docker Compose · 4 services · Volume persistence · Health checks</p>
+      </div>
+      <div class="mode-card" style="background:rgba(255,107,53,.06);border-color:rgba(255,107,53,.2)">
+        <h4 style="color:var(--hf-orange)">🤗 HF Spaces</h4>
+        <p>Swap Ollama → HF Inference · Same Docker container · Same architecture</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SLIDE 12 — CLOSING ════════════════════════════════════ -->
+<div class="slide" id="s12">
+  <div class="bg-ring" style="width:500px;height:500px;top:-180px;right:-120px;border-color:rgba(13,158,166,.15)"></div>
+  <div class="bg-ring" style="width:300px;height:300px;bottom:-80px;left:40px;border-color:rgba(139,92,246,.12)"></div>
+  <div class="bg-ring" style="width:200px;height:200px;bottom:40px;left:180px;border-color:rgba(13,158,166,.1)"></div>
+  <div class="closing-logo">Net<span>Flow</span></div>
+  <div class="closing-sub">Know your net. Grow your portfolio.</div>
+  <div class="pill-row">
+    <div class="p-pill" style="color:var(--red);border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.07)">🛡 4-Layer Security</div>
+    <div class="p-pill" style="color:var(--teal-hi);border-color:rgba(13,158,166,.3);background:rgba(13,158,166,.07)">⚡ &lt;4s Latency</div>
+    <div class="p-pill" style="color:var(--green);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.07)">✅ Deterministic Fallback</div>
+    <div class="p-pill" style="color:var(--amber);border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.07)">🔗 LangSmith Observability</div>
+    <div class="p-pill" style="color:var(--hf-orange);border-color:rgba(255,107,53,.3);background:rgba(255,107,53,.07)">🤗 Hugging Face Ready</div>
+  </div>
+  <div class="closing-line">This architecture scales to any domain needing live data fetching, multi-stage AI reasoning, graceful LLM fallback, and user feedback loops. We built the system an investor would actually deploy and use daily.</div>
+  <div style="margin-top:24px"><span class="tag green">Production-ready · Docker · LangSmith · Hugging Face</span></div>
+</div>
+
+</div><!-- /deck -->
+
+<script>
+const SLIDES = 12;
+const TOTAL_S = 300;
+const durations = [30,28,50,50,35,35,40,60,40,45,22,15];
+
+/* ── NARRATION SCRIPTS ─────────────────────────────────── */
+const narration = [
+  /* 1 - Title */
+  `Welcome to NetFlow — the AI-powered real estate investment analyst. Know your net. Grow your portfolio. NetFlow is a four-agent LLM system that takes a natural language search, fetches live listings and mortgage rates, runs multi-stage AI analysis, and streams back ranked properties — complete with investment scores, risk flags, and strategy notes — all in under four seconds.`,
+
+  /* 2 - Problem */
+  `Real estate investing is broken. Individual investors spend weeks manually pulling data from ten different websites, calculating cash flow by hand, and guessing at market risk. With NetFlow, you get a live AI analyst that does all of this in seconds. No more spreadsheets. No more guesswork. Every decision is traceable, explainable, and grounded in real data.`,
+
+  /* 3 - Security */
+  `Before any LLM ever sees your text, six layers of security kick in. The UserAgent runs a length check, encoding validation, and twenty-five regex patterns catching injection attacks — covering jailbreaks, SQL injection, shell injection, cross-site scripting, and Python code injection. Intent is classified, fields are extracted — ZIP, budget, beds, strategy — and only then is a structured, validated request passed downstream. Raw text never reaches an LLM.`,
+
+  /* 4 - Live Results */
+  `Results stream back in real-time over Server-Sent Events — no polling, no delays. Each property receives an AI investment score, monthly cash flow projection, cap rate, gross rent multiplier, and a risk profile. Live data comes from RentCast for listings and rent estimates, and the Federal Reserve's FRED API for the current thirty-year mortgage rate. Ten ranked properties, streamed back in seconds.`,
+
+  /* 5 - Quality Pills */
+  `New in this release: every property card shows three AI confidence signals. Groundedness tells you whether the AI's reasoning is anchored in real retrieved data. Correctness measures agreement with our deterministic scoring rubric. Confidence is a composite trust signal combining all three factors. These signals tell investors when to trust the AI — and when to do their own due diligence. That's transparency at scale.`,
+
+  /* 6 - Feedback Loop */
+  `Click any property, and you'll see thumbs-up and thumbs-down feedback buttons. Every vote is captured in LangSmith — our observability platform — tied to the exact property rank, address, and AI score. It's idempotent: change your mind, resubmit, and it overwrites. Over time, we learn which properties actually converted and which were red herrings. That's a production-grade feedback loop built in from day one.`,
+
+  /* 7 - PropertyChat */
+  `PropertyChat is a conversational mode where the agent remembers previous questions about a specific property. Ask "What if I only put fifteen percent down instead of twenty?" and the chat recalculates your monthly payment, updates cash flow, and adjusts the analysis — all grounded in real market data. Five-turn sliding window memory, per property. No hallucinations. Every answer is traceable in LangSmith.`,
+
+  /* 8 - Agent Architecture */
+  `Let me walk you through the AI engine. Stage one is the UserAgent — a CPU-only input guard that costs zero tokens. Stage two is the Market Analyst, which fetches live mortgage rates from FRED and rent estimates from RentCast, cached fifteen minutes per ZIP. Stage three is the Property Scorer, which scores all ten properties in a single batched LLM call using compact JSON payloads. Stage four is the Risk Advisor, which flags high-risk properties and generates memos in one more batched call. The genius: if Ollama goes down, we switch to deterministic rule-based scoring. Same outputs. No downtime.`,
+
+  /* 9 - Hugging Face */
+  `NetFlow is model-agnostic. Today we run Ollama locally with LLaMA 3.1 eight billion — zero API costs, zero latency to remote servers, full privacy. But the LangChain adapter layer means you can swap in any Hugging Face model in a single line of config. Mistral seven B, Qwen 2.5, Phi-3.5-mini — all compatible. And the entire Docker Compose stack can deploy to Hugging Face Spaces with just an environment variable change. Local-first design with cloud-ready architecture.`,
+
+  /* 10 - Observability */
+  `Production observability was a first-class requirement, not an afterthought. Every request generates a LangSmith span tree showing exact timing for each agent stage. Structured logs include request IDs so you can trace any search end-to-end across logs, LangSmith, and the user feedback table. Quality signals — groundedness, correctness, and confidence — are published per run. Cache hit rates, token usage per stage, and fallback flags are all surfaced. This is the observability that enterprise teams struggle to get right.`,
+
+  /* 11 - Tech Stack */
+  `The stack: Next.js sixteen on the frontend with React, TypeScript, and Tailwind. FastAPI with uvicorn on the backend, LangChain with LangSmith for tracing, and Ollama running LLaMA locally. Live data from RentCast and the FRED API. Deployment is flip-switch: demo mode uses mock data with zero API keys; development adds local Ollama and real API keys; production runs Docker Compose with four services and volume persistence; and Hugging Face Spaces mode swaps in the HF inference API with a single environment variable.`,
+
+  /* 12 - Closing */
+  `Real estate is just the starting point. This architecture scales to any domain where you need to fetch live data from APIs, run multi-stage AI reasoning, fall back gracefully when an LLM is unavailable, and capture user feedback to iterate. The code is production-ready: Docker Compose, structured logging, CORS security, database persistence, and comprehensive error handling. We didn't build a prototype. We built the system an investor would actually deploy and use daily. Know your net. Grow your portfolio. Thank you.`
+];
+
+/* ── STATE ─────────────────────────────────────────────── */
+let current = 0, elapsed = 0, playing = true;
+let timer = null, stageElapsed = 0;
+let synth = window.speechSynthesis;
+let utterance = null;
+let voiceList = [];
+let selectedVoice = null;
+let ttsEnabled = true;
+let speechRate = 1.05;
+let speechVolume = 1.0;
+
+const slides = document.querySelectorAll('.slide');
+const bar = document.getElementById('progress-bar');
+const counter = document.getElementById('slide-counter');
+const timerEl = document.getElementById('timer-display');
+const playBtn = document.getElementById('play-btn');
+
+/* ── VOICE SETUP ───────────────────────────────────────── */
+function loadVoices() {
+  voiceList = synth.getVoices();
+  const sel = document.getElementById('voice-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const preferred = ['Samantha','Karen','Moira','Daniel','Alex','Google US English','Microsoft Aria','Microsoft Guy'];
+  const englishVoices = voiceList.filter(v => v.lang.startsWith('en'));
+  englishVoices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = v.name + (v.localService ? '' : ' ☁');
+    sel.appendChild(opt);
+  });
+  for (const pref of preferred) {
+    const found = englishVoices.find(v => v.name.includes(pref));
+    if (found) { sel.value = found.name; selectedVoice = found; break; }
+  }
+  if (!selectedVoice && englishVoices.length) selectedVoice = englishVoices[0];
+}
+
+if (synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
+setTimeout(loadVoices, 300);
+
+/* ── TTS ───────────────────────────────────────────────── */
+function speak(idx) {
+  if (!ttsEnabled) return;
+  synth.cancel();
+  const text = narration[idx];
+  utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = speechRate;
+  utterance.volume = speechVolume;
+  utterance.pitch = 1.0;
+  if (selectedVoice) utterance.voice = selectedVoice;
+  utterance.onstart = () => {
+    document.getElementById('speaking-indicator').style.opacity = '1';
+    updateSubtitle(text);
+  };
+  utterance.onend = () => {
+    document.getElementById('speaking-indicator').style.opacity = '0';
+  };
+  utterance.onerror = () => {
+    document.getElementById('speaking-indicator').style.opacity = '0';
+  };
+  synth.speak(utterance);
+}
+
+let subtitleWords = [];
+let subtitleIdx = 0;
+let subtitleTimer = null;
+
+function updateSubtitle(text) {
+  subtitleWords = text.split(' ');
+  subtitleIdx = 0;
+  const el = document.getElementById('subtitle-text');
+  el.style.opacity = '1';
+  clearInterval(subtitleTimer);
+  const msPerWord = (1000 / speechRate) / 2.8;
+  subtitleTimer = setInterval(() => {
+    if (subtitleIdx >= subtitleWords.length) { clearInterval(subtitleTimer); el.style.opacity='0'; return; }
+    const chunk = subtitleWords.slice(Math.max(0, subtitleIdx-6), subtitleIdx+7).join(' ');
+    el.textContent = chunk;
+    subtitleIdx += 7;
+  }, msPerWord * 7);
+}
+
+/* ── SLIDE LOGIC ───────────────────────────────────────── */
+function fmt(s) {
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function show(idx, autoSpeak) {
+  slides.forEach((sl, i) => {
+    sl.classList.remove('active','prev');
+    if (i === idx) sl.classList.add('active');
+    else if (i < idx) sl.classList.add('prev');
+  });
+  current = idx;
+  counter.textContent = (current+1) + ' / ' + SLIDES;
+  if (autoSpeak !== false) speak(idx);
+}
+
+function tick() {
+  if (!playing) return;
+  elapsed = Math.min(elapsed+1, TOTAL_S);
+  stageElapsed++;
+  timerEl.textContent = fmt(elapsed) + ' / ' + fmt(TOTAL_S);
+  bar.style.width = (elapsed / TOTAL_S * 100) + '%';
+  if (stageElapsed >= durations[current] && current < SLIDES-1) {
+    current++;
+    stageElapsed = 0;
+    show(current);
+  }
+  if (elapsed >= TOTAL_S) {
+    playing = false;
+    playBtn.textContent = '▶ Play';
+    playBtn.classList.remove('active-ctrl');
+    clearInterval(timer);
+    synth.cancel();
+  }
+}
+
+function togglePlay() {
+  playing = !playing;
+  if (playing) {
+    playBtn.textContent = '⏸ Pause';
+    playBtn.classList.add('active-ctrl');
+    timer = setInterval(tick, 1000);
+    if (ttsEnabled && synth.paused) synth.resume();
+    else speak(current);
+  } else {
+    playBtn.textContent = '▶ Play';
+    playBtn.classList.remove('active-ctrl');
+    clearInterval(timer);
+    synth.pause();
+  }
+}
+
+function next() {
+  if (current < SLIDES-1) {
+    current++; stageElapsed = 0;
+    elapsed = durations.slice(0, current).reduce((a,b)=>a+b, 0);
+    show(current);
+    bar.style.width = (elapsed/TOTAL_S*100)+'%';
+    timerEl.textContent = fmt(elapsed)+' / '+fmt(TOTAL_S);
+  }
+}
+
+function prev() {
+  if (current > 0) {
+    current--; stageElapsed = 0;
+    elapsed = durations.slice(0, current).reduce((a,b)=>a+b, 0);
+    show(current);
+    bar.style.width = (elapsed/TOTAL_S*100)+'%';
+    timerEl.textContent = fmt(elapsed)+' / '+fmt(TOTAL_S);
+  }
+}
+
+function restart() {
+  current = 0; elapsed = 0; stageElapsed = 0;
+  show(0);
+  bar.style.width = '0%';
+  timerEl.textContent = '0:00 / 5:00';
+  if (!playing) togglePlay();
+}
+
+function toggleMute() {
+  ttsEnabled = !ttsEnabled;
+  const btn = document.getElementById('mute-btn');
+  if (ttsEnabled) { btn.textContent = '🔊 Voice On'; btn.classList.add('active-ctrl'); speak(current); }
+  else { btn.textContent = '🔇 Muted'; btn.classList.remove('active-ctrl'); synth.cancel(); }
+}
+
+function setRate(val) {
+  speechRate = parseFloat(val);
+  document.getElementById('rate-val').textContent = speechRate.toFixed(1)+'×';
+  if (ttsEnabled && playing) speak(current);
+}
+
+function setVoice(name) {
+  selectedVoice = voiceList.find(v => v.name === name) || null;
+  if (ttsEnabled && playing) speak(current);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+  else if (e.key === 'ArrowLeft') prev();
+  else if (e.key === 'p' || e.key === 'P') togglePlay();
+  else if (e.key === 'm' || e.key === 'M') toggleMute();
+});
+
+show(0, true);
+timer = setInterval(tick, 1000);
+</script>
+</body>
+</html>

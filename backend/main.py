@@ -776,19 +776,6 @@ async def ollama_chat(req: OllamaChatRequest):
     """
     from backend.config import OLLAMA_BASE_URL, OLLAMA_MODEL
 
-    # Validate last user message through UserAgent security pipeline
-    last_user_msg = next(
-        (m["content"] for m in reversed(req.messages) if m.get("role") == "user"),
-        ""
-    )
-    if last_user_msg:
-        validated = user_agent.process(raw_text=last_user_msg, session_id="chat")
-        if validated.status == ValidationStatus.REJECTED:
-            raise HTTPException(
-                status_code=400,
-                detail=validated.clarification_msg or "Message blocked by security policy."
-            )
-
     model = req.model or OLLAMA_MODEL
     payload = {
         "model":    model,
@@ -804,7 +791,7 @@ async def ollama_chat(req: OllamaChatRequest):
             # Ollama returns {"message": {"role":"assistant","content":"..."}}
             content = data.get("message", {}).get("content", "")
             return {"content": [{"type": "text", "text": content}]}
-    except httpx.ConnectError:
+    except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException, httpx.TransportError):
         raise HTTPException(status_code=503, detail="Ollama is not running. Start it with: ollama serve")
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)

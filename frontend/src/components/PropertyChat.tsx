@@ -8,33 +8,28 @@ import { log } from "@/lib/logger";
 interface Message { role:"user"|"assistant"; content:string; }
 interface Props    { property:Property; mortgageRate:number; onClose:()=>void; }
 
-const API_BASE = typeof process!=="undefined" && process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL : "http://localhost:8000";
+const OLLAMA_URL = "http://localhost:11434";
 
 const cfColor = (v:number) => v>300?"var(--grn)":v>0?"var(--amb)":"var(--red)";
 
 function buildSystemPrompt(p:Property, rate:number):string {
-  const down=p.price*.2, loan=p.price-down, r=rate/100/12, n=360;
-  const pi=r>0?loan*(r*(1+r)**n)/((1+r)**n-1):loan/n;
-  const taxIns=Math.round(p.price*.015/12);
-  const piti=Math.round(pi+taxIns);
-  const opex=Math.round(p.est_rent*.35);
-  const netCF=p.est_rent-piti-opex;
+  const down=p.price*.2;
+  const netCF=p.cash_flow;
   const coc=((netCF*12)/down*100).toFixed(2);
   const grm=(p.price/(p.est_rent*12)).toFixed(1);
   const cap=((p.est_rent*12*.65)/p.price*100).toFixed(2);
-  const breakEven=Math.round(piti*1.15);
   return (
     `You are a professional real estate investment analyst. Answer ONLY about this property using the numbers below.\n\n`+
     `PROPERTY: ${p.address}, ZIP ${p.zip_code}\n`+
     `Price: $${p.price.toLocaleString()} | ${p.beds}bd/${p.baths}ba | ${p.sqft?.toLocaleString()||"N/A"} sqft | ${p.dom}d listed\n`+
     `Score: ${p.ai_score}/100 | Tags: ${p.tags.join(", ")}\n\n`+
-    `FINANCING (${rate}% / 30yr / 20% down): Down $${Math.round(down).toLocaleString()} | PITI $${piti.toLocaleString()}/mo\n`+
-    `INCOME: Rent $${p.est_rent.toLocaleString()}/mo | Opex $${opex.toLocaleString()}/mo | Net CF $${netCF.toLocaleString()}/mo\n`+
-    `METRICS: Cap ${cap}% | GRM ${grm}x | CoC ${coc}% | Break-even $${breakEven.toLocaleString()}/mo\n\n`+
+    `FINANCING (${rate}% / 30yr / 20% down): Down $${Math.round(down).toLocaleString()}\n`+
+    `INCOME: Rent $${p.est_rent.toLocaleString()}/mo | Net CF $${netCF.toLocaleString()}/mo\n`+
+    `METRICS: Cap ${cap}% | GRM ${grm}x | CoC ${coc}%\n\n`+
     `RULES: Be direct and concise. Use bullet points for multi-part answers. Max 180 words. Use only the numbers above.`
   );
 }
+
 
 const QUICK = [
   "💰 Cash flow breakdown",
@@ -87,26 +82,19 @@ export default function PropertyChat({ property, mortgageRate, onClose }:Props) 
         return;
       }
       try {
-        const ctrl=new AbortController(), t=setTimeout(()=>ctrl.abort(),5000);
+        const ctrl=new AbortController(), t=setTimeout(()=>ctrl.abort(),4000);
         let res:Response;
-        try { res=await fetch(`${API_BASE}/api/ollama-chat`,{
-          method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({messages:[{role:"user",content:"hi"}],system:"Reply: ready",model:""}),
-          signal:ctrl.signal,
-        }); } finally { clearTimeout(t); }
+        try { res=await fetch(`${OLLAMA_URL}/api/tags`,{signal:ctrl.signal}); }
+        finally { clearTimeout(t); }
         if (res.ok){
-          let model = "llama3";
-          try {
-            const h=await fetch(`${API_BASE}/health`);
-            if(h.ok){const d=await h.json();if(d.model)model=d.model;}
-          } catch(_){}
+          const d=await res.json();
+          const model=(d.models?.[0]?.name||"llama3").replace(":latest","");
           _ollamaCache = { ok: true, model, ts: Date.now() };
           setOllamaOk(true);
           setOllamaModel(model);
         } else {
-          const ok = res.status !== 503;
-          _ollamaCache = { ok, model: "llama3", ts: Date.now() };
-          setOllamaOk(ok);
+          _ollamaCache = { ok: false, model: "llama3", ts: Date.now() };
+          setOllamaOk(false);
         }
       } catch(_){
         _ollamaCache = { ok: false, model: "llama3", ts: Date.now() };
@@ -116,11 +104,7 @@ export default function PropertyChat({ property, mortgageRate, onClose }:Props) 
     check();
 
     const down=Math.round(property.price*.2);
-    const r=mortgageRate/100/12,n=360,loan=property.price-down;
-    const pi=Math.round(r>0?loan*(r*(1+r)**n)/((1+r)**n-1):loan/n);
-    const opex=Math.round(property.est_rent*.35);
-    const piti=pi+Math.round(property.price*.015/12);
-    const netCF=property.est_rent-piti-opex;
+    const netCF=property.cash_flow;
     const coc=((netCF*12)/down*100).toFixed(1);
     const e=property.ai_score>=85?"🏆":property.ai_score>=70?"⭐":property.ai_score>=55?"✅":"⚠️";
     log.ai(`Chat opened: ${property.address}`,{score:property.ai_score});
@@ -147,28 +131,30 @@ export default function PropertyChat({ property, mortgageRate, onClose }:Props) 
       const ctrl=new AbortController(), t=setTimeout(()=>ctrl.abort(),90_000);
       let res:Response;
       try {
-        res=await fetch(`${API_BASE}/api/ollama-chat`,{
+        res=await fetch(`${OLLAMA_URL}/api/chat`,{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({messages:msgs.map(m=>({role:m.role,content:m.content})),
-            system:buildSystemPrompt(property,mortgageRate),model:""}),
+          body:JSON.stringify({
+            model: ollamaModel,
+            stream: false,
+            messages:[
+              {role:"system",content:buildSystemPrompt(property,mortgageRate)},
+              ...msgs.map(m=>({role:m.role,content:m.content})),
+            ],
+            options:{temperature:0.2,num_predict:800},
+          }),
           signal:ctrl.signal,
         });
       } finally { clearTimeout(t); }
 
       if(!res.ok){
-        const err=await res.json().catch(()=>({}));
-        const detail=(err as {detail?:string}).detail||`HTTP ${res.status}`;
-        if(res.status===503){
-          setOllamaOk(false);
-          setError("Ollama is not running. Run: ollama serve — then try again.");
-          setLoading(false); return;
-        }
-        if(res.status===400){setError(`Blocked: ${detail}`);setLoading(false);return;}
-        throw new Error(detail);
+        setOllamaOk(false);
+        _ollamaCache = { ok: false, model: ollamaModel, ts: Date.now() };
+        setError("Ollama error. Make sure it is running: ollama serve");
+        setLoading(false); return;
       }
 
       const data=await res.json();
-      const reply=(data.content as Array<{type:string;text?:string}>)?.find(b=>b.type==="text")?.text??"No response.";
+      const reply=data?.message?.content??"No response.";
       if(!reply.trim()) throw new Error("Empty response");
       setOllamaOk(true);
       log.ai("Reply received",{chars:reply.length});
@@ -176,10 +162,12 @@ export default function PropertyChat({ property, mortgageRate, onClose }:Props) 
     } catch(e:unknown){
       const msg=e instanceof Error?e.message:"Unknown error";
       if(msg.includes("abort")||msg.includes("timed out"))
-        setError("Request timed out. Ollama may still be loading — try again in 30s.");
-      else if(msg.includes("Failed to fetch")||msg.includes("NetworkError"))
-        setError("Cannot reach backend. Make sure uvicorn is running on port 8000.");
-      else setError(`Error: ${msg}`);
+        setError("Ollama timed out. Make sure it is running: ollama serve");
+      else if(msg.includes("Failed to fetch")||msg.includes("NetworkError")){
+        setOllamaOk(false);
+        _ollamaCache = { ok: false, model: ollamaModel, ts: Date.now() };
+        setError("Cannot reach Ollama. Make sure it is running: ollama serve");
+      } else setError(`Error: ${msg}`);
       log.err("ai",`Chat error: ${msg}`);
     } finally { setLoading(false); }
   };
@@ -243,7 +231,7 @@ export default function PropertyChat({ property, mortgageRate, onClose }:Props) 
           borderBottom:"1px solid rgba(244,63,94,.18)",
           fontSize:11,color:"var(--red)",lineHeight:1.6,flexShrink:0,
         }}>
-          🦙 <strong>Ollama offline.</strong> Run <code style={{background:"var(--bg-raise)",padding:"1px 5px",borderRadius:4,fontFamily:"'JetBrains Mono',monospace",fontSize:10}}>ollama serve</code> then ask again.
+          🦙 <strong>Ollama offline.</strong> Run <code style={{background:"var(--bg-raise)",padding:"1px 5px",borderRadius:4,fontFamily:"'JetBrains Mono',monospace",fontSize:10}}>ollama serve</code> to enable AI chat.
         </div>
       )}
 
