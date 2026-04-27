@@ -5,80 +5,54 @@
 
 ## **[OPENING — 0:00–0:30]**
 
-*[Show NetFlow branding/loading screen]*
+
+
+Hello plano Prompt engineers
 
 **"Real estate investing is a tedious process.**
 
-Individual investors spend weeks analyzing properties—pulling data from ten different sites, calculating cash flow by hand, guessing market risks.
+Investors spend weeks analyzing properties—pulling data from different sites, calculating cash flows, guessing market risks.
 
-We built **NetFlow**: an AI investment analyst that does this in **seconds**.
+thatswhy, We built **NetFlow**: an AI investment analyst that does this in **seconds**.
 
-NetFlow is a four-agent LLM system running entirely locally. It takes a natural-language search — fetches live listings and mortgage rates, runs multi-stage AI analysis, and streams back ranked properties with investment scores, risk flags, and personalized strategy notes.
+NetFlow is an AI powered natural-language search for your investments — fetches live listings and ranked properties with investment scores, risk flags, and personalized strategy notes. The system handles any failures gracefully. And every decision is tracked and traced—you can see exactly why the AI scored a property the way it did."
 
-**Here's what makes us different:** We designed it to work even when AI is slow or unavailable. Every LLM stage has deterministic fallback logic. The system handles any failures gracefully. And every decision is tracked and traceable—you can see exactly why the AI scored a property the way it did."
+---Lets see the power of NetFlow with a Live Demo. 
 
----
 
-## **[DEMO PART 1: CORE SEARCH FLOW — 0:30–2:00]**
-
-### **Step 1: Login & Show Persistence** (0:30–0:45)
-*[Show login page with theme toggle]*
 
 **"Users log in here. We've built full database persistence—login history, search history, favorites are all saved. This isn't a prototype; it's production infrastructure."**
 
-*[Login with demo credentials]*
 
----
 
 ### **Step 2: Execute Search Query** (0:45–1:10)
-*[Type into SearchPanel]*
+
 
 **"Watch the UserAgent spring to life. I'm typing a natural-language query."**
 
-```
-"Show me 3+ bedroom houses under $400k in Dallas that cashflow, good rent growth"
-```
 
-**"Instantly, six layers of security kick in: length check, encoding check, 25 regex patterns catching injection attacks, intent classification. All this happens before any LLM ever sees the text."**
 
-*[Show results streaming in real-time]*
+**"Instantly, six layers of security kick in: All this happens before any LLM ever sees the text."**
+
 
 **"Results are streaming back over Server-Sent Events. No polling, no delays. Each property gets an AI investment score, cap rate, monthly cash flow projection, risk profile."**
 
 ---
 
-### **Step 3: Highlight New Quality Indicators** (1:10–1:35)
-*[Point to property cards showing quality pills]*
-
 **"NEW: See these quality pills? Groundedness, Correctness, Confidence—these are AI confidence signals."**
 
-*[Hover over a quality pill to show tooltip]*
 
-**"Groundedness (80+): Is the AI reasoning grounded in real data? Correctness (95): Did the AI calculate financials accurately? Confidence (88): How sure is the model about this ranking?**
 
 **These signals tell investors whether to trust the AI or do their own due diligence. That's transparency at scale."**
 
----
 
-### **Step 4: User Feedback Loop** (1:35–2:00)
-*[Click on one property card, show the 👍/👎 feedback buttons]*
 
-**"Click a property. See the thumbs-up and thumbs-down buttons? When you vote, that feedback is captured in LangSmith—our observability platform. Over time, we learn which properties actually converted and which were red herrings. That's production-grade feedback loops."**
-
-*[Click thumbs-up and demonstrate the feedback submission]*
+ See the thumbs-up and thumbs-down buttons? 
 
 **"Every thumbs-up/down is tied to the exact property rank, address, and AI score. If you change your mind and resubmit, it overwrites. This is designed for continuous improvement."**
 
 ---
 
-## **[DEMO PART 2: CONVERSATIONAL & COMPARATIVE ANALYSIS — 2:00–2:45]**
-
-### **Step 5: PropertyChat (Grounded Conversation)** (2:00–2:20)
-*[Click into a property, open PropertyChat]*
-
-**"Now we're in PropertyChat. This is a conversational mode where the agent remembers previous questions about this specific property."**
-
-*[Ask a follow-up question, e.g.]*
 
 ```
 "What if I only put 15% down instead of 20%?"
@@ -95,13 +69,9 @@ NetFlow is a four-agent LLM system running entirely locally. It takes a natural-
 
 *[Point to different metrics and highlight AI scores]*
 
-**"Each property has a color-coded risk profile. See this one marked MEDIUM risk? The AI flagged it because there's a tight supply trend and high DOM (days-on-market). But the cash flow is still strong. That's nuanced reasoning."**
+**"Each property has a color-coded risk profile.
 
 ---
-
-## **[AGENT ARCHITECTURE DEEP DIVE — 2:45–3:45]**
-
-*[Optional: Share screen to show ARCHITECTURE.md or pull up architecture diagram]*
 
 **"Let me show you the AI engine. We built a four-agent orchestrated pipeline. Here's how it works:**
 
