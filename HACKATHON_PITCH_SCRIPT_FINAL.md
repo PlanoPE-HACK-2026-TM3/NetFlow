@@ -7,15 +7,15 @@
 
 *[Show NetFlow branding/loading screen]*
 
-**"Real estate investing is broken.**
+**"Real estate investing is a tedious process.**
 
-Individual investors spend weeks analyzing properties—pulling data from ten different sites, calculating cash flow by hand, guessing at market risk.
+Individual investors spend weeks analyzing properties—pulling data from ten different sites, calculating cash flow by hand, guessing market risks.
 
 We built **NetFlow**: an AI investment analyst that does this in **seconds**.
 
-NetFlow is a four-agent LLM system running entirely locally. It takes a natural-language search—like *"Show me cash-flowing duplexes under $300k in Dallas with good rent growth"*—fetches live listings and mortgage rates, runs multi-stage AI analysis, and streams back ranked properties with investment scores, risk flags, and personalized strategy notes.
+NetFlow is a four-agent LLM system running entirely locally. It takes a natural-language search — fetches live listings and mortgage rates, runs multi-stage AI analysis, and streams back ranked properties with investment scores, risk flags, and personalized strategy notes.
 
-**Here's what makes us different:** We designed it to work even when AI is slow or unavailable. Every LLM stage has deterministic fallback logic. The system never breaks. And every decision is tracked and traceable—you can see exactly why the AI scored a property the way it did."
+**Here's what makes us different:** We designed it to work even when AI is slow or unavailable. Every LLM stage has deterministic fallback logic. The system handles any failures gracefully. And every decision is tracked and traceable—you can see exactly why the AI scored a property the way it did."
 
 ---
 
