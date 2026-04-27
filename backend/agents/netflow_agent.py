@@ -1454,14 +1454,23 @@ class NetFlowAgent:
             enriched["_idx"] = i
             ctx.enriched.append(enriched)
 
-        # Drop negative cash-flow properties — they are not investable at this
-        # budget/rate combination and should never appear in the ranked output.
-        pos = [e for e in ctx.enriched if e.get("cash_flow", 0) >= 0]
-        if pos:  # guard: keep all if every property is negative (show best of bad)
-            ctx.enriched = pos
+        # Drop negative cash-flow properties — never investable, never shown.
+        ctx.enriched = [e for e in ctx.enriched if e.get("cash_flow", 0) >= 0]
 
         await self._risk_agent.run(ctx, llm)
         ctx.stage_times["risk_advisor"] = round(time.perf_counter()-t1, 3)
+
+        # Drop HIGH-risk properties after risk agent has profiled each one.
+        safe = [
+            e for e in ctx.enriched
+            if ctx.risk_profiles.get(e.get("address", ""), None) is None
+            or ctx.risk_profiles[e["address"]].overall_risk != "HIGH"
+        ]
+        if safe:
+            ctx.enriched = safe
+
+        # Keep only the top 5 properties by cash flow (best cash-flow wins).
+        ctx.enriched = sorted(ctx.enriched, key=lambda e: e.get("cash_flow", 0), reverse=True)[:5]
 
         # ── Agent 2: Scoring (uses pre-enriched ctx.enriched) ──
         t2 = time.perf_counter()

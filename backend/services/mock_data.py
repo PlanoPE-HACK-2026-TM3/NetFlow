@@ -87,7 +87,8 @@ def mock_rent_estimate(price: int, beds: int, baths: float) -> int:
 
 
 def _rng_val(seed_val: int) -> float:
-    return 0.0065 + (seed_val % 1000) / 1_000_000 * 1500
+    # 0.90%–1.05% rent-to-price — minimum needed for positive CF at 7.2% / 20% down / 35% opex
+    return 0.009 + (seed_val % 1000) / 1_000_000 * 1500
 
 
 def mock_market_stats(zip_code: str) -> dict[str, Any]:
